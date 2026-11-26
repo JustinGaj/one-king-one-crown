@@ -25,7 +25,7 @@ async function until(fn, ms = 10000, what = 'condition') {
 }
 
 (async () => {
-  const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], { env: { ...process.env, PORT, OKOC_TEST_AUTOPILOT: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], { env: { ...process.env, PORT, OKOC_TEST_AUTOPILOT: '1', OKOC_ABSENT_GRACE_MS: '400', OKOC_ABSENT_VOTE_MS: '6000', OKOC_ROOM_EMPTY_MS: '1000' }, stdio: ['ignore', 'pipe', 'pipe'] });
   let errs = '';
   srv.stderr.on('data', (d) => { errs += d; });
   await new Promise((res) => srv.stdout.on('data', (d) => { if (String(d).includes('running')) res(); }));
@@ -82,6 +82,31 @@ async function until(fn, ms = 10000, what = 'condition') {
     const forged = await client().call('resume', { code, pid: joined[0].pid, token: 'nope' });
     assert(forged.error, 'resume with a wrong token is rejected');
     await until(() => again.last && again.last.game, 3000, 'resumed state');
+    assert(!again.last.room.absent.length, 'a quick refresh does not start a vote');
+
+    // A player drops out for longer: the rest vote, a bot takes the seat, and the player
+    // rejoins from a "new device" by name and gets the same seat back.
+    const ben = clients[2];
+    const benPid = joined[1].pid;
+    ben.disconnect();
+    const others = clients.filter((c) => c !== ben);
+    await until(() => others.every((c) => c.last.room.absent.some((a) => a.pid === benPid && a.state === 'voting' && a.canVote)), 4000, 'absence vote');
+    assert((await others[0].call('absent:vote', { target: benPid, choice: 'bot' })).ok);
+    assert((await others[1].call('absent:vote', { target: benPid, choice: 'bot' })).ok);
+    assert((await others[2].call('absent:vote', { target: benPid, choice: 'wait' })).ok);
+    assert((await others[2].call('absent:vote', { target: benPid, choice: 'nonsense' })).error, 'only wait or bot');
+    assert((await others[3].call('absent:vote', { target: benPid, choice: 'bot' })).ok);
+    await until(() => host.last.room.absent.some((a) => a.pid === benPid && a.state === 'bot'), 3000, 'bot takes the seat');
+    await until(() => host.last.game.players.find((p) => p.pid === benPid).auto, 3000, 'seat on autopilot');
+    const benBack = client(); clients[2] = benBack;
+    assert((await client().call('join', { code, name: 'Zed' })).error, 'strangers cannot join a running game');
+    const rejoin = await benBack.call('join', { code, name: 'BEN' });
+    assert(rejoin.ok && rejoin.pid === benPid, 'rejoin by name gets the same seat');
+    await until(() => benBack.last && benBack.last.game && !benBack.last.room.absent.length, 3000, 'back at the table');
+    const benView = benBack.last.game.players.find((p) => p.pid === benPid);
+    assert(!benView.auto && benView.connected, 'the bot hands the seat back');
+    assert.strictEqual(benBack.last.game.hand.length, benView.handCount, 'own cards are back');
+    assert((await client().call('join', { code, name: 'Ben' })).error, 'a connected seat cannot be taken');
 
     // Everyone goes on autopilot and the game plays to the end
     for (const c of clients) assert((await c.call('auto', { on: true })).ok);
@@ -94,6 +119,11 @@ async function until(fn, ms = 10000, what = 'condition') {
     // Back to lobby and a second game can start
     assert((await host.call('host:lobby')).ok);
     await until(() => host.last && !host.last.game, 3000, 'lobby');
+    // Everyone leaves: the room is wiped shortly after
+    for (const c of clients) c.disconnect();
+    await sleep(1600);
+    const gone = await client().call('join', { code, name: 'Late' });
+    assert(gone.error && /No room/.test(gone.error), 'an empty room is wiped');
     assert(!errs.trim(), 'server logged errors:\n' + errs);
     console.log(`Multiplayer test passed (room ${code}, winner ${g.players[0].name}).`);
     process.exitCode = 0;

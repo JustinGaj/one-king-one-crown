@@ -572,6 +572,15 @@ class Game {
     await this.pause(this.settings.turnGapMs);
   }
 
+  // The room was wiped (everyone left): end quietly so nothing keeps running.
+  abandon() {
+    this.phase = 'over';
+    this.turn && this.turn.wait && this.turn.wait({ abort: true });
+    for (const p of [...this.prompts.values()]) p.resolve(null);
+    if (this.neg && this.neg.finish) this.neg.finish();
+    if (this.intro && this.intro.finish) this.intro.finish();
+  }
+
   // Pacing pauses only matter when a person is watching; all-bot games run at full speed.
   pause(ms) {
     if (!(ms > 0) || this.phase === 'over' || !Object.values(this.players).some((p) => !p.isBot && p.connected)) return Promise.resolve();

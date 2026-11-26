@@ -25,7 +25,9 @@ app.get('/api/cards', (req, res) => res.json(CATALOG));
 app.get('/healthz', (req, res) => res.send('ok'));
 
 const rooms = new Map();
-const ROOM_IDLE_MS = 30 * 60 * 1000;
+// When everyone has left a room, it is kept just long enough to survive a refresh or a dropped
+// connection, then wiped. While at least one player is still there, everything is kept.
+const ROOM_EMPTY_MS = Number(process.env.OKOC_ROOM_EMPTY_MS) || 3 * 60 * 1000;
 
 function newCode() {
   const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -35,14 +37,14 @@ function newCode() {
 }
 
 function onEmpty(room) {
-  // Remove rooms nobody has been in for a while
-  setTimeout(() => {
+  clearTimeout(room.wipeTimer);
+  room.wipeTimer = setTimeout(() => {
     const stillEmpty = ![...room.members.values()].some((m) => !m.isBot && m.sockets.size);
-    if (stillEmpty && Date.now() - room.lastActive >= ROOM_IDLE_MS - 1000 && rooms.get(room.code) === room) {
-      rooms.delete(room.code);
-      for (const p of (room.game ? room.game.prompts.values() : [])) p.resolve(null);
-    }
-  }, ROOM_IDLE_MS);
+    if (!stillEmpty || rooms.get(room.code) !== room) return;
+    rooms.delete(room.code);
+    room.clearAbsence();
+    if (room.game) room.game.abandon();
+  }, ROOM_EMPTY_MS);
 }
 
 io.on('connection', (socket) => {
@@ -79,7 +81,7 @@ io.on('connection', (socket) => {
   on('join', ({ code, name }) => {
     const r = rooms.get(String(code || '').toUpperCase().trim());
     if (!r) throw new GameError('No room with that code.');
-    return enter(r, r.addMember(name));
+    return enter(r, r.running() ? r.reclaim(name) : r.addMember(name));
   });
   on('resume', ({ code, pid: p, token }) => {
     const r = rooms.get(String(code || '').toUpperCase());
@@ -88,7 +90,7 @@ io.on('connection', (socket) => {
   });
   on('leave', () => {
     const r = need();
-    if (r.game && r.game.phase !== 'over') throw new GameError('You can’t leave during a game — use autopilot instead.');
+    if (r.game && r.game.phase !== 'over') throw new GameError('You can’t leave during a game. If you close the page, the others vote to wait for you or let a bot play your seat.');
     r.removeMember(pid);
     room = null; pid = null;
   });
@@ -103,6 +105,8 @@ io.on('connection', (socket) => {
   // automatically. The automated multiplayer test switches it on to play a whole game quickly.
   if (process.env.OKOC_TEST_AUTOPILOT === '1') on('auto', ({ target, on: v }) => need().setAuto(pid, target || pid, !!v));
   on('chat', ({ text }) => need().lobbyMessage(pid, text));
+  on('absent:vote', ({ target, choice }) => need().voteAbsent(pid, target, choice));
+  on('absent:revote', ({ target }) => need().revoteAbsent(pid, target));
   on('tutorial', ({ on: v }) => need().setTutorial(pid, !!v));
   on('tour:done', () => need().tourDone(pid));
 

@@ -2,7 +2,10 @@
 const crypto = require('crypto');
 const { Game, GameError } = require('./game');
 
-const AWAY_AUTOPILOT_MS = 60 * 1000; // a disconnected player is auto-played after 1 minute
+// When a player drops out of a running game: a short grace period covers refreshes and blips,
+// then the players still at the table vote to wait for them or to let a bot play their seat.
+const ABSENT_GRACE_MS = Number(process.env.OKOC_ABSENT_GRACE_MS) || 10 * 1000;
+const ABSENT_VOTE_MS = Number(process.env.OKOC_ABSENT_VOTE_MS) || 30 * 1000;
 // Game speed: how long bots think, how long a played card stays on the table, and the pause between turns.
 const SPEEDS = {
   relaxed: { botDelayMs: 2600, botAnswerMs: 1500, cardHoldMs: 3200, turnGapMs: 1500 },
@@ -18,7 +21,8 @@ function cleanName(s) {
 class Room {
   constructor(code, onEmpty) {
     this.code = code;
-    this.members = new Map(); // pid -> { pid, name, token, isBot, sockets:Set, awayTimer, autoByAway }
+    this.members = new Map(); // pid -> { pid, name, token, isBot, sockets:Set, awayTimer, botSeat }
+    this.absent = new Map(); // pid -> { state: 'voting' | 'waiting' | 'bot', votes: Map(voter -> 'wait' | 'bot'), endsAt, timer }
     this.order = [];
     this.hostPid = null;
     this.game = null;
@@ -45,6 +49,17 @@ class Room {
     return m;
   }
 
+  // Rejoin a running game from any device: the same name takes back a seat whose player has
+  // dropped out, with the same cards, gold and everything else.
+  reclaim(name) {
+    name = cleanName(name);
+    const m = [...this.members.values()].find((x) => !x.isBot && x.name.toLowerCase() === name.toLowerCase());
+    if (!m) throw new GameError('That game has already started. To rejoin, enter the name you played with.');
+    if (m.sockets.size) throw new GameError(`${m.name} is already connected to this game.`);
+    m.token = crypto.randomBytes(16).toString('hex'); // the old device can't come back as this seat too
+    return m;
+  }
+
   removeMember(pid) {
     if (this.game && this.game.phase !== 'over') throw new GameError('You can’t remove players during a game.');
     const m = this.members.get(pid);
@@ -61,9 +76,16 @@ class Room {
     if (!m || m.token !== token) throw new GameError('Could not rejoin that room.');
     m.sockets.add(socket);
     clearTimeout(m.awayTimer);
+    clearTimeout(this.wipeTimer);
     if (this.game) {
       this.game.setConnected(pid, true);
-      if (m.autoByAway) { m.autoByAway = false; this.game.setAuto(pid, false); }
+      const a = this.absent.get(pid);
+      if (a) {
+        clearTimeout(a.timer);
+        this.absent.delete(pid);
+        if (this.running()) this.game.log(`${m.name} is back and takes their seat again.`);
+      }
+      if (m.botSeat) { m.botSeat = false; this.game.setAuto(pid, false); }
     }
     this.lastActive = Date.now();
     this.changed();
@@ -75,18 +97,81 @@ class Room {
     if (!m) return;
     m.sockets.delete(socket);
     if (m.sockets.size) return;
-    if (this.game && this.game.phase !== 'over') {
+    if (this.running()) {
       this.game.setConnected(pid, false);
-      m.awayTimer = setTimeout(() => {
-        if (!m.sockets.size && this.game && this.game.phase !== 'over' && !this.game.players[pid].auto) {
-          m.autoByAway = true;
-          this.game.setAuto(pid, true);
-          this.game.log(`${m.name} has been away for a minute — autopilot takes over until they return.`);
-        }
-      }, AWAY_AUTOPILOT_MS);
+      m.awayTimer = setTimeout(() => this.startAbsenceVote(pid), ABSENT_GRACE_MS);
     }
     this.changed();
-    if (![...this.members.values()].some((x) => !x.isBot && x.sockets.size)) this.onEmpty(this);
+    if (!this.voters().length) this.onEmpty(this);
+  }
+
+  running() { return !!(this.game && this.game.phase !== 'over'); }
+
+  // people still at the table (connected humans), optionally leaving one out
+  voters(except) {
+    return [...this.members.values()].filter((x) => !x.isBot && x.sockets.size && x.pid !== except).map((x) => x.pid);
+  }
+
+  // ───── a player dropped out: wait for them, or let a bot play their seat? ─────
+  startAbsenceVote(pid) {
+    const m = this.members.get(pid);
+    if (!m || m.sockets.size || !this.running()) return;
+    const voters = this.voters(pid);
+    if (!voters.length) return; // nobody left to ask; the room is wiped if nobody comes back
+    if (this.hostPid === pid) this.hostPid = voters[0]; // someone at the table keeps the host controls
+    const prev = this.absent.get(pid);
+    if (prev) clearTimeout(prev.timer);
+    const a = { state: 'voting', votes: new Map(), endsAt: Date.now() + ABSENT_VOTE_MS };
+    a.timer = setTimeout(() => this.finishAbsenceVote(pid), ABSENT_VOTE_MS);
+    this.absent.set(pid, a);
+    this.game.log(`${m.name} lost connection. Vote: wait for them to come back, or let a bot play their seat?`, { kind: 'alert' });
+    this.changed();
+  }
+
+  voteAbsent(voter, pid, choice) {
+    const a = this.absent.get(pid);
+    if (!a || !this.running()) throw new GameError('There is nothing to vote on.');
+    if (a.state !== 'voting') throw new GameError('That vote is already over.');
+    if (voter === pid || !this.voters(pid).includes(voter)) throw new GameError('You can’t vote on this.');
+    if (choice !== 'wait' && choice !== 'bot') throw new GameError('Vote “wait” or “bot”.');
+    a.votes.set(voter, choice);
+    if (this.voters(pid).every((v) => a.votes.has(v))) this.finishAbsenceVote(pid);
+    else this.changed();
+  }
+
+  finishAbsenceVote(pid) {
+    const a = this.absent.get(pid);
+    const m = this.members.get(pid);
+    if (!a || a.state !== 'voting' || !m) return;
+    clearTimeout(a.timer);
+    if (!this.running() || m.sockets.size) { this.absent.delete(pid); this.changed(); return; }
+    const counted = [...a.votes].filter(([v]) => this.voters(pid).includes(v)).map(([, c]) => c);
+    const bot = counted.filter((c) => c === 'bot').length;
+    const wait = counted.length - bot;
+    if (bot > wait) { // a tie or no votes means the table waits
+      a.state = 'bot';
+      m.botSeat = true;
+      this.game.setAuto(pid, true);
+      this.game.log(`The table voted ${bot}–${wait}: a bot plays ${m.name}'s seat until they come back.`, { kind: 'alert' });
+    } else {
+      a.state = 'waiting';
+      this.game.log(`The table voted ${wait}–${bot} to wait for ${m.name}. Their turn waits for them; anyone can call a new vote.`, { kind: 'alert' });
+    }
+    this.changed();
+  }
+
+  // while waiting, anyone at the table can ask for a fresh vote
+  revoteAbsent(voter, pid) {
+    const a = this.absent.get(pid);
+    if (!a || a.state !== 'waiting') throw new GameError('There is nothing to vote on.');
+    if (!this.voters(pid).includes(voter)) throw new GameError('You can’t vote on this.');
+    this.startAbsenceVote(pid);
+    this.voteAbsent(voter, pid, 'bot');
+  }
+
+  clearAbsence() {
+    for (const a of this.absent.values()) clearTimeout(a.timer);
+    this.absent.clear();
   }
 
   connected(pid) { const m = this.members.get(pid); return !!m && (m.isBot || m.sockets.size > 0); }
@@ -148,6 +233,8 @@ class Room {
     this.requireHost(pid);
     if (this.game && this.game.phase !== 'over') throw new GameError('The game is still running.');
     this.game = null;
+    this.clearAbsence();
+    for (const m of this.members.values()) m.botSeat = false;
     this.changed();
   }
 
@@ -187,7 +274,7 @@ class Room {
     if (target !== pid) this.requireHost(pid);
     const m = this.members.get(target);
     if (!m) throw new GameError('No such player.');
-    m.autoByAway = false;
+    m.botSeat = false;
     this.game.setAuto(target, on);
     this.game.log(`${m.name}: autopilot ${on ? 'ON' : 'OFF'}.`);
   }
@@ -217,6 +304,12 @@ class Room {
       members: this.order.map((p) => { const m = this.members.get(p); return { pid: p, name: m.name, isBot: m.isBot, tutorial: m.tutorial, connected: this.connected(p) }; }),
       chat: this.lobbyChat.slice(-100),
       inGame: !!this.game,
+      absent: this.running() ? [...this.absent].map(([p, a]) => ({
+        pid: p, name: this.members.get(p).name, state: a.state, endsAt: a.endsAt, ms: ABSENT_VOTE_MS,
+        bot: [...a.votes.values()].filter((c) => c === 'bot').length,
+        wait: [...a.votes.values()].filter((c) => c === 'wait').length,
+        voters: this.voters(p).length, myVote: a.votes.get(pid) || null, canVote: this.voters(p).includes(pid),
+      })) : [],
     };
   }
 

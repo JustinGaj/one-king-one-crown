@@ -225,6 +225,7 @@
     renderHand();
     renderPrompt();
     renderNeg();
+    renderAbsence();
     renderLog();
     renderSideChat();
     announce();
@@ -320,6 +321,9 @@
       if (p.gold !== s.gold) { goldChange(s, p.gold - s.gold); s.gold = p.gold; }
 
       const chips = [];
+      const ab = (S.room.absent || []).find((x) => x.pid === p.pid);
+      if (ab) chips.push(`<span class="chip gone">${ab.state === 'voting' ? 'Disconnected: voting' : ab.state === 'waiting' ? 'Disconnected: waiting' : 'Bot playing'}</span>`);
+      else if (!p.connected && !p.isBot) chips.push('<span class="chip gone">Reconnecting…</span>');
       if (waitingOn.has(p.pid)) chips.push(`<span class="chip wait" title="${esc(waitingOn.get(p.pid))}">Deciding</span>`);
       for (const st of p.statuses) chips.push(`<span class="chip" title="${esc(st.label)}">${esc(st.label)}</span>`);
       for (const b of p.bets) chips.push(`<span class="chip bet" title="${b.type === 'scout' ? 'Scout' : 'Hindsight'}: until the end of round ${b.deadline}">${b.type === 'scout' ? 'Scout' : 'Hindsight'} → ${esc(pname(b.target))}</span>`);
@@ -332,7 +336,7 @@
       s.fids = new Set(p.faceDown.map((f) => f.fid));
       $('.plate', el).innerHTML = `
         <div class="top"><span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>${p.pid === S.room.you ? '<span class="you">YOU</span>' : ''}
-          <span class="flags">${p.isBot ? '<span class="bot">BOT</span>' : p.auto ? '<span class="bot" title="Away for over a minute: the computer is playing until they return">AWAY</span>' : p.learning && p.pid !== S.room.you ? '<span class="bot new" title="First game: using the guide">NEW</span>' : ''}<span class="dot ${p.connected || p.isBot ? '' : 'off'}" title="${p.connected || p.isBot ? 'online' : 'offline'}"></span></span></div>
+          <span class="flags">${p.isBot ? '<span class="bot">BOT</span>' : p.auto ? '<span class="bot" title="Disconnected: a bot plays their seat until they return">AWAY</span>' : p.learning && p.pid !== S.room.you ? '<span class="bot new" title="First game: using the guide">NEW</span>' : ''}<span class="dot ${p.connected || p.isBot ? '' : 'off'}" title="${p.connected || p.isBot ? 'online' : 'offline'}"></span></span></div>
         <div class="goldline">${goldGrid(p.gold)}<span class="gold"><b>${Math.round(s.shown)}</b><small>gold</small></span>
           <span class="cnt" title="${p.handCount} cards in hand"><span class="mini-back" style="background-image:url(${backFor(p.isKing ? 'king' : 'noble')})"></span>${p.handCount}</span></div>
         ${fd ? `<div class="fd">${fd}</div>` : ''}
@@ -657,6 +661,41 @@
     const humans = g.players.filter((p) => !p.isBot && !p.auto && p.connected);
     $('#neg-who').textContent = `Done: ${humans.filter((p) => ready.includes(p.pid)).map((p) => p.name).join(', ') || 'nobody yet'}. Ends early when everyone is done.`;
   }
+
+  // ───────── a player dropped out: wait, or let a bot play? ─────────
+  let absenceKey = '';
+  function renderAbsence() {
+    const el = $('#absence');
+    const list = (S.room.absent || []).filter((a) => a.state !== 'bot');
+    const g = G();
+    const key = JSON.stringify([list, g.turn && g.turn.pid]);
+    if (key === absenceKey) return;
+    absenceKey = key;
+    if (!list.length) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+    el.classList.remove('hidden');
+    el.innerHTML = list.map((a) => {
+      const n = esc(a.name);
+      if (a.state === 'voting' && a.canVote && !a.myVote) {
+        return `<div class="ab-card vote"><h3>${n} lost connection</h3><div class="dots"></div>
+          <p>Wait for them to come back, or let a bot play their seat until they return? Their cards and gold are kept either way.</p>
+          <div class="opts"><button class="btn primary" data-ab="wait" data-pid="${a.pid}">Wait for ${n}</button><button class="btn" data-ab="bot" data-pid="${a.pid}">Let a bot play</button></div>
+          <div class="bar"><i data-bar="${a.endsAt}" data-total="${a.ms}"></i></div></div>`;
+      }
+      if (a.state === 'voting') {
+        return `<div class="ab-card small"><b>${n} lost connection.</b> ${a.myVote ? `You voted to ${a.myVote === 'bot' ? 'let a bot play' : 'wait'}.` : ''} Votes: wait ${a.wait} · bot ${a.bot} (of ${a.voters}).</div>`;
+      }
+      const theirTurn = g.turn && g.turn.pid === a.pid;
+      return `<div class="ab-card small"><b>Waiting for ${n} to come back.</b> ${theirTurn ? 'It’s their turn, so the game is paused.' : 'The game goes on; it pauses on their turn.'}
+        ${a.canVote ? `<button class="btn small" data-ab="revote" data-pid="${a.pid}">Let a bot play instead</button>` : ''}</div>`;
+    }).join('');
+  }
+  $('#absence').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ab]');
+    if (!b) return;
+    b.disabled = true;
+    if (b.dataset.ab === 'revote') send('absent:revote', { target: b.dataset.pid });
+    else send('absent:vote', { target: b.dataset.pid, choice: b.dataset.ab });
+  });
 
   // ───────── log & chat ─────────
   let logKey = '';
