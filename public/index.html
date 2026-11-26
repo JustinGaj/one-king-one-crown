@@ -5,24 +5,43 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>One King One Crown</title>
   <meta name="description" content="Play One King One Crown online with friends — a social manipulation card game of scheming, betrayal and gold.">
+  <meta name="theme-color" content="#ff0000">
   <link rel="icon" href="/art/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <!-- Shared icons, drawn after the game's own logo and tokens -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-crown" viewBox="0 0 100 110">
+      <path d="M0 110V44L10 0l10 44L30 0l10 44L50 0l10 44L70 0l10 44L90 0l10 44v66z" fill="#000"/>
+      <ellipse cx="31" cy="80" rx="13" ry="7.5" fill="#fff"/><circle cx="31" cy="80" r="5" fill="#000"/>
+      <ellipse cx="69" cy="80" rx="13" ry="7.5" fill="#fff"/><circle cx="69" cy="80" r="5" fill="#000"/>
+    </symbol>
+    <symbol id="i-eye" viewBox="0 0 40 24">
+      <path d="M1 12Q20-6 39 12 20 30 1 12z" fill="#000"/><circle cx="20" cy="12" r="6" fill="#fff"/>
+    </symbol>
+    <symbol id="i-cw" viewBox="0 0 24 24">
+      <path d="M19.5 13A7.5 7.5 0 1 1 16 6.2" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <path d="M13 3.5l5.2 2.2-2.4 5.1" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </svg>
+
   <!-- HOME -->
-  <section id="home" class="screen">
-    <div class="home-card">
-      <div class="logo">
-        <div class="logo-text">ONE KING<br>ONE CROWN</div>
-        <div class="logo-crown" aria-hidden="true"><span></span><span></span></div>
+  <section id="home" class="screen brand-screen">
+    <div class="hero">
+      <div class="logo-big">
+        <div class="logo-words">ONE KING<br>ONE CROWN</div>
+        <svg class="logo-crown" aria-hidden="true"><use href="#i-crown"/></svg>
       </div>
-      <p class="tag">Scheme. Betray. Take the throne.<br><span>There’s only One Crown.</span></p>
+      <p class="slogan">A game of politics and betrayal</p>
+    </div>
+    <div class="paper-card">
       <label class="field">Your name<input id="name" maxlength="20" autocomplete="nickname" placeholder="e.g. Lady Layla"></label>
       <button id="create" class="btn primary">Create a game</button>
-      <div class="or">or join a friend</div>
+      <div class="or"><span>or join a friend</span></div>
       <div class="row">
         <input id="code" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false">
         <button id="join" class="btn">Join</button>
@@ -30,18 +49,24 @@
       <p id="home-error" class="error" role="alert"></p>
       <button class="link" data-action="rules">How to play</button>
     </div>
-    <footer class="credit">Fan-made online edition of <a href="https://onecrown.store/" target="_blank" rel="noopener">One King One Crown</a> — used under CC BY-NC-SA 4.0. Not for sale. Buy the real game at onecrown.store.</footer>
+    <footer class="credit">Fan-made online edition of <a href="https://onecrown.store/" target="_blank" rel="noopener">One King One Crown</a>, used under CC BY-NC-SA 4.0. Not for sale. Buy the real game at onecrown.store.</footer>
+    <div class="crowd" aria-hidden="true"></div>
   </section>
 
   <!-- LOBBY -->
-  <section id="lobby" class="screen hidden">
-    <div class="lobby-card">
-      <h1>Room <span id="room-code" class="code"></span></h1>
-      <p class="muted">Send your friends the code or this link: <button id="copy-link" class="link">Copy invite link</button></p>
+  <section id="lobby" class="screen brand-screen hidden">
+    <div class="logo-small"><div class="logo-words">ONE KING<br>ONE CROWN</div><svg class="logo-crown" aria-hidden="true"><use href="#i-crown"/></svg></div>
+    <div class="paper-card lobby-card">
+      <div class="lobby-head">
+        <h1>Room</h1><span id="room-code" class="code"></span>
+        <button id="copy-link" class="btn small">Copy invite link</button>
+      </div>
+      <div class="dots" aria-hidden="true"></div>
       <ul id="members" class="members"></ul>
+      <p id="lobby-wait" class="muted"></p>
       <div id="host-controls" class="host-controls">
         <button id="add-bot" class="btn">+ Add bot</button>
-        <label class="inline">Negotiation timer
+        <label class="inline">Negotiation
           <select id="neg-seconds">
             <option value="120">2 minutes (official)</option>
             <option value="90">90 seconds</option>
@@ -52,7 +77,6 @@
         </label>
         <button id="start" class="btn primary">Start game</button>
       </div>
-      <p id="lobby-wait" class="muted"></p>
       <p id="lobby-error" class="error" role="alert"></p>
       <div class="lobby-chat">
         <div id="lobby-chat-log" class="chat-log"></div>
@@ -65,7 +89,7 @@
   <!-- GAME -->
   <section id="game" class="screen hidden">
     <header class="topbar">
-      <div class="brand">ONE KING ONE CROWN</div>
+      <div class="brand"><span>ONE KING<br>ONE CROWN</span><svg aria-hidden="true"><use href="#i-crown"/></svg></div>
       <div id="tracker" class="tracker"></div>
       <div id="phase" class="phase"></div>
       <div class="top-actions">
@@ -79,7 +103,9 @@
       <main class="table-wrap">
         <div id="table" class="table">
           <div id="center" class="center"></div>
+          <div id="waiting" class="waiting"></div>
         </div>
+        <div id="banner" class="banner hidden" aria-live="polite"></div>
       </main>
       <aside class="side">
         <div class="tabs"><button class="tab active" data-tab="log">Table log</button><button class="tab" data-tab="chat">Chat <span id="chat-badge" class="badge hidden"></span></button></div>

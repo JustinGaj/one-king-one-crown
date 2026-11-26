@@ -11,6 +11,15 @@ friends from anywhere. Empty seats can be filled with bots.
 - The server enforces every rule and sends each player only what they're allowed to see (your
   hand, your face-down Knights). Reconnect with a refresh. Autopilot covers anyone who drops out.
 
+The look follows the printed game and its box: signal red, black and white, Montserrat, and
+the faceless hooded figures. Each player sits at the table as a figure whose eyes follow the
+action.
+
+![The table on your turn](docs/screenshots/3-your-turn.jpg)
+
+More in [docs/screenshots](docs/screenshots): home, lobby, card actions, negotiation, a new
+King, game over and the phone layout.
+
 ## Play locally
 
 ```bash
