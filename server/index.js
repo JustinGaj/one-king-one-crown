@@ -25,7 +25,7 @@ app.get('/api/cards', (req, res) => res.json(CATALOG));
 app.get('/healthz', (req, res) => res.send('ok'));
 
 const rooms = new Map();
-// When everyone has left a room, it is kept just long enough to survive a refresh or a dropped
+// When every person has left a room (bots don't count), it is kept just long enough to survive a refresh or a dropped
 // connection, then wiped. While at least one player is still there, everything is kept.
 const ROOM_EMPTY_MS = Number(process.env.OKOC_ROOM_EMPTY_MS) || 3 * 60 * 1000;
 

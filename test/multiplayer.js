@@ -124,6 +124,14 @@ async function until(fn, ms = 10000, what = 'condition') {
     await sleep(1600);
     const gone = await client().call('join', { code, name: 'Late' });
     assert(gone.error && /No room/.test(gone.error), 'an empty room is wiped');
+    // A lobby left with only bots in it is wiped too
+    const solo = client();
+    const made = await solo.call('create', { name: 'Solo' });
+    assert((await solo.call('host:addBot')).ok);
+    assert((await solo.call('leave')).ok);
+    await sleep(1600);
+    assert(/No room/.test((await client().call('join', { code: made.code, name: 'Late' })).error || ''), 'a bots-only room is wiped');
+    solo.close();
     assert(!errs.trim(), 'server logged errors:\n' + errs);
     console.log(`Multiplayer test passed (room ${code}, winner ${g.players[0].name}).`);
     process.exitCode = 0;

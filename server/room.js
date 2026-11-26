@@ -69,6 +69,7 @@ class Room {
     this.order = this.order.filter((p) => p !== pid);
     if (this.hostPid === pid) this.hostPid = this.order.find((p) => !this.members.get(p).isBot) || null;
     this.changed();
+    this.checkEmpty();
   }
 
   attach(pid, token, socket) {
@@ -102,6 +103,11 @@ class Room {
       m.awayTimer = setTimeout(() => this.startAbsenceVote(pid), ABSENT_GRACE_MS);
     }
     this.changed();
+    this.checkEmpty();
+  }
+
+  // Bots don't count: once no person is connected, the room's 3-minute countdown starts.
+  checkEmpty() {
     if (!this.voters().length) this.onEmpty(this);
   }
 
