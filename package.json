@@ -1,0 +1,19 @@
+{
+  "name": "one-king-one-crown",
+  "version": "0.1.0",
+  "description": "Online multiplayer browser version of the One King One Crown card game (non-commercial fan adaptation, CC BY-NC-SA 4.0).",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node test/rules.js && node test/sim.js 300"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "CC-BY-NC-SA-4.0",
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  }
+}
