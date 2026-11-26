@@ -31,7 +31,7 @@ class Room {
     if (this.order.length >= 8) throw new GameError('The room is full (8 players max).');
     if ([...this.members.values()].some((m) => m.name.toLowerCase() === name.toLowerCase())) throw new GameError('Someone in the room already has that name.');
     const pid = crypto.randomBytes(6).toString('hex');
-    const m = { pid, name, token: crypto.randomBytes(16).toString('hex'), isBot, sockets: new Set() };
+    const m = { pid, name, token: crypto.randomBytes(16).toString('hex'), isBot, tutorial: false, sockets: new Set() };
     this.members.set(pid, m);
     this.order.push(pid);
     if (!this.hostPid && !isBot) this.hostPid = pid;
@@ -107,7 +107,7 @@ class Room {
     this.requireHost(pid);
     if (this.game && this.game.phase !== 'over') throw new GameError('The game is already running.');
     if (this.order.length < 4) throw new GameError('You need at least 4 players (add bots to fill seats).');
-    const players = this.order.map((p) => { const m = this.members.get(p); return { pid: p, name: m.name, isBot: m.isBot }; });
+    const players = this.order.map((p) => { const m = this.members.get(p); return { pid: p, name: m.name, isBot: m.isBot, learning: m.tutorial }; });
     this.game = new Game({
       players,
       settings: this.settings,
@@ -130,6 +130,7 @@ class Room {
   skipWaits(pid) {
     this.requireHost(pid);
     if (!this.game) return;
+    if (this.game.intro && this.game.intro.finish) this.game.intro.finish();
     for (const p of [...this.game.prompts.values()]) {
       if (p.kind === 'roll' || p.kind === 'info') { p.resolve(true); continue; }
       let v = p.default;
@@ -139,6 +140,20 @@ class Room {
       if (v !== undefined) p.resolve(v);
     }
     this.game.log('The host skipped the waiting.');
+  }
+
+  // A player asks for (or turns off) the first-time guide. Only their own screen shows it;
+  // the game just waits for them to finish the short tour before round one.
+  setTutorial(pid, on) {
+    const m = this.members.get(pid);
+    if (!m || m.isBot) return;
+    m.tutorial = !!on;
+    if (this.game) this.game.setLearning(pid, on);
+    this.changed();
+  }
+
+  tourDone(pid) {
+    if (this.game) this.game.introDone(pid);
   }
 
   setAuto(pid, target, on) {
@@ -173,7 +188,7 @@ class Room {
       you: pid,
       host: this.hostPid,
       settings: this.settings,
-      members: this.order.map((p) => { const m = this.members.get(p); return { pid: p, name: m.name, isBot: m.isBot, connected: this.connected(p) }; }),
+      members: this.order.map((p) => { const m = this.members.get(p); return { pid: p, name: m.name, isBot: m.isBot, tutorial: m.tutorial, connected: this.connected(p) }; }),
       chat: this.lobbyChat.slice(-100),
       inGame: !!this.game,
     };

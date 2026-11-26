@@ -64,6 +64,11 @@
       <div class="dots" aria-hidden="true"></div>
       <ul id="members" class="members"></ul>
       <p id="lobby-wait" class="muted"></p>
+      <div class="guide-opt">
+        <span class="hood guide-hood" aria-hidden="true"><span class="eyes"><i></i><i></i></span></span>
+        <div class="guide-copy"><b>First time playing?</b><span>Turn on the guide for a 2-minute visual tour before round one, plus tips while you play. Only you see it, and the game waits for you to finish the tour.</span></div>
+        <button id="guide-toggle" class="switch" role="switch" aria-checked="false" aria-label="Guide for first-time players"><i></i></button>
+      </div>
       <div id="host-controls" class="host-controls">
         <button id="add-bot" class="btn">+ Add bot</button>
         <label class="inline">Negotiation
@@ -95,6 +100,7 @@
       <div class="top-actions">
         <button id="skip" class="btn small hidden" title="Answer every open question with its default">Skip waiting</button>
         <button id="auto-me" class="btn small" title="Let the computer play for you">Autopilot</button>
+        <button id="guide-btn" class="btn small" title="Tour, tips and rules">Guide</button>
         <button class="btn small" data-action="rules">Rules</button>
         <span class="code small" id="game-code"></span>
       </div>
@@ -128,6 +134,7 @@
   <div id="toast" class="toast hidden" role="status"></div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/guide.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

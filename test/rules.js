@@ -353,6 +353,32 @@ const tests = {
     assert.deepStrictEqual([g.gold('p1'), g.gold('p2')].sort(), [300, 600], 'exactly one tied noble is the scapegoat');
     assert.strictEqual(g.gold('p3'), 600);
   },
+  async 'First-time players: round one waits for the tour, then starts'() {
+    const players = ['a', 'b', 'c', 'd'].map((pid, i) => ({ pid, name: pid.toUpperCase(), learning: i < 2, isBot: i === 3 }));
+    const g = new Game({ players, settings: { botDelayMs: 0, negotiationSeconds: 0, introSeconds: 60 }, onError: (e) => { throw e; } });
+    g.start();
+    await new Promise((r) => setImmediate(r));
+    assert.strictEqual(g.phase, 'intro');
+    assert.deepStrictEqual(g.view('a').intro.pending.sort(), ['a', 'b']);
+    assert.strictEqual(g.view('a').players.find((p) => p.pid === 'a').learning, true);
+    g.introDone('a');
+    assert.strictEqual(g.phase, 'intro', 'still waiting for b');
+    g.setLearning('b', false); // b turns the guide off instead
+    await new Promise((r) => setTimeout(r, 20));
+    assert.strictEqual(g.round, 1);
+    assert.notStrictEqual(g.phase, 'intro');
+    assert.strictEqual(g.intro, null);
+    for (const p of g.seats) g.setAuto(p, true); // let the rest of the game finish
+  },
+  async 'No tour wait when nobody asked for it'() {
+    const players = ['a', 'b', 'c', 'd'].map((pid) => ({ pid, name: pid.toUpperCase() }));
+    const g = new Game({ players, settings: { botDelayMs: 0, negotiationSeconds: 0 }, onError: (e) => { throw e; } });
+    g.start();
+    await new Promise((r) => setImmediate(r));
+    assert.strictEqual(g.round, 1);
+    assert.notStrictEqual(g.phase, 'intro');
+    for (const p of g.seats) g.setAuto(p, true);
+  },
 };
 
 (async () => {

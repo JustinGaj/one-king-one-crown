@@ -52,3 +52,4 @@ change one if your group plays it differently. The code reference is in brackets
 | Spoken parts (Actors, praise, pledges, Parrot) | Typed into the game and shown to the table; say them on your voice call too. |
 | Timers | A player who doesn't roll within 20 s rolls automatically. Votes default to "no" after 60 s. Other answers wait 2 minutes, then take the default. The host can "Skip waiting". |
 | Disconnects | After 1 minute away, autopilot plays for you until you return. Anyone can turn on autopilot, and the host can turn it on for others. |
+| First-time guide | Each player chooses it for themselves in the lobby. Before round one the game waits until everyone who chose it has finished the tour (at most 4 minutes; the host can skip). A refresh doesn't end the wait; a player away for a minute goes on autopilot, which does. |

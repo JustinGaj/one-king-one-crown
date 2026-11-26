@@ -17,7 +17,7 @@ const PUBLIC = path.join(__dirname, '..', 'public');
 // Serve index.html with versioned asset URLs so browsers always load the current client
 const BUILD = Date.now().toString(36);
 const INDEX = fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8')
-  .replace('/app.js"', `/app.js?v=${BUILD}"`).replace('/style.css"', `/style.css?v=${BUILD}"`);
+  .replace(/(\/(?:app|guide)\.js|\/style\.css)"/g, `$1?v=${BUILD}"`);
 app.get(['/', '/index.html'], (req, res) => { res.set('Cache-Control', 'no-cache'); res.type('html').send(INDEX); });
 app.use('/art', express.static(path.join(PUBLIC, 'art'), { maxAge: '7d' }));
 app.use(express.static(PUBLIC, { maxAge: 0, etag: true })); // always revalidate code so updates show up
@@ -101,6 +101,8 @@ io.on('connection', (socket) => {
   on('host:skip', () => need().skipWaits(pid));
   on('auto', ({ target, on: v }) => need().setAuto(pid, target || pid, !!v));
   on('chat', ({ text }) => need().lobbyMessage(pid, text));
+  on('tutorial', ({ on: v }) => need().setTutorial(pid, !!v));
+  on('tour:done', () => need().tourDone(pid));
 
   on('play', ({ uid, faceDown, target }) => game().play(pid, { uid, faceDown: !!faceDown, target }));
   on('answer', ({ id, value }) => game().answer(pid, id, value));

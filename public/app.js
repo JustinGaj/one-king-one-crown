@@ -84,6 +84,24 @@
     for (const i of el.querySelectorAll('.eyes i')) { i.style.setProperty('--px', px.toFixed(2) + 'px'); i.style.setProperty('--py', py.toFixed(2) + 'px'); }
   }
 
+  // ───────── first-time guide ─────────
+  const GUIDE_PREF = 'okoc-guide';
+  // On by default until you have finished a game on this device; your own choice always wins.
+  function guidePref() {
+    try {
+      const v = localStorage.getItem(GUIDE_PREF);
+      if (v === 'on' || v === 'off') return v === 'on';
+      return !localStorage.getItem('okoc-played');
+    } catch (e) { return true; }
+  }
+  function setGuidePref(on) { try { localStorage.setItem(GUIDE_PREF, on ? 'on' : 'off'); } catch (e) { /* private mode */ } }
+  const guide = window.createGuide({
+    $, esc, send, cname, toast, state: () => S,
+    openModal: (...a) => openModal(...a), closeModal: () => closeModal(), showRules: () => showRules(),
+    setPref: setGuidePref, rerender: () => render(),
+  });
+  let guideSyncedFor = null;
+
   // ───────── home ─────────
   const params = new URLSearchParams(location.search);
   if (params.get('room')) $('#code').value = params.get('room').toUpperCase().slice(0, 4);
@@ -143,15 +161,29 @@
     inp.value = '';
   });
 
+  $('#guide-toggle').onclick = () => {
+    const on = $('#guide-toggle').getAttribute('aria-checked') !== 'true';
+    setGuidePref(on);
+    $('#guide-toggle').setAttribute('aria-checked', String(on));
+    send('tutorial', { on });
+  };
+
   let lobbyKey = '';
   function renderLobby() {
     const r = S.room;
+    const mine = r.members.find((m) => m.pid === r.you);
+    if (mine && guideSyncedFor !== r.code) {
+      guideSyncedFor = r.code;
+      const want = guidePref();
+      if (want !== !!mine.tutorial) send('tutorial', { on: want });
+      $('#guide-toggle').setAttribute('aria-checked', String(want));
+    } else if (mine) $('#guide-toggle').setAttribute('aria-checked', String(!!mine.tutorial));
     $('#room-code').textContent = r.code;
     const key = JSON.stringify([r.members, r.host, r.you]);
     if (key !== lobbyKey) {
       lobbyKey = key;
       let html = r.members.map((m) => {
-        const sub = [m.pid === r.host ? 'Host' : '', m.isBot ? 'Bot' : '', m.pid === r.you ? 'You' : '', !m.connected && !m.isBot ? 'Away' : ''].filter(Boolean).join(' · ');
+        const sub = [m.pid === r.host ? 'Host' : '', m.isBot ? 'Bot' : '', m.pid === r.you ? 'You' : '', m.tutorial ? 'First game' : '', !m.connected && !m.isBot ? 'Away' : ''].filter(Boolean).join(' · ');
         return `<li class="${m.connected || m.isBot ? '' : 'off'}">${figure(false, m.pid)}<span class="tag-name" title="${esc(m.name)}">${esc(m.name)}</span><span class="sub">${sub || '&nbsp;'}</span>
           ${isHost() && m.pid !== r.you ? `<button class="kick" data-kick="${m.pid}" title="Remove ${esc(m.name)}" aria-label="Remove ${esc(m.name)}">×</button>` : ''}</li>`;
       }).join('');
@@ -179,7 +211,7 @@
   // ───────── game: main render ─────────
   function render() {
     if (!S.room) return;
-    if (!S.game) { show('lobby'); renderLobby(); closeModalIf('over'); resetTable(); return; }
+    if (!S.game) { show('lobby'); renderLobby(); closeModalIf('over'); resetTable(); guide.onRender(); return; }
     show('game');
     $('#game-code').textContent = S.room.code;
     renderTop();
@@ -192,13 +224,15 @@
     renderLog();
     renderSideChat();
     announce();
-    if (G().phase === 'over') showGameOver();
+    collectSeen();
+    guide.onRender();
+    if (G().phase === 'over') { try { localStorage.setItem('okoc-played', '1'); } catch (e) { /* ignore */ } showGameOver(); }
   }
 
   function resetTable() {
     for (const s of seatEls.values()) s.el.remove();
     seatEls.clear();
-    seen = null; centerKeys = {}; handKey = ''; dealt.clear(); lastLogI = -1;
+    seen = null; centerKeys = {}; handKey = ''; dealt.clear(); lastLogI = -1; seenCards.clear();
   }
 
   function renderTop() {
@@ -209,11 +243,13 @@
     }).join('');
     let txt = '';
     if (g.phase === 'starting') txt = 'Dealing…';
+    else if (g.phase === 'intro') txt = `Quick tour for new players <span class="timer" data-ends="${g.intro ? g.intro.endsAt : 0}"></span>`;
     else if (g.phase === 'over') txt = 'Game over';
     else if (g.phase === 'negotiation') txt = `Negotiation phase <span class="timer" data-ends="${g.negotiation.endsAt}"></span>`;
     else if (g.turn) txt = g.turn.pid === S.room.you ? `<span class="yourturn">Your turn</span> ${g.turn.playsLeft} card${g.turn.playsLeft === 1 ? '' : 's'} left to play` : `${esc(pname(g.turn.pid))}'s turn · ${g.turn.playsLeft} left`;
     $('#phase').innerHTML = txt;
-    $('#skip').classList.toggle('hidden', !isHost() || !g.waiting.length || g.phase === 'over');
+    $('#skip').classList.toggle('hidden', !isHost() || (!g.waiting.length && g.phase !== 'intro') || g.phase === 'over');
+    $('#guide-btn').classList.toggle('on', guide.isOn());
     const me = meP();
     $('#auto-me').classList.toggle('on', !!(me && me.auto));
     $('#auto-me').textContent = me && me.auto ? 'Autopilot on' : 'Autopilot';
@@ -237,8 +273,15 @@
     for (const w of g.waiting) if (!waitingOn.has(w.pid)) waitingOn.set(w.pid, w.title);
     const W = table.clientWidth;
     const H = table.clientHeight;
-    const rx = W < 600 ? 35 : 41;
-    const ry = W < 600 ? 38 : 35;
+    // with many players or a short screen the plates shrink so seats never pile up
+    const phone = W < 600;
+    const compact = !phone && (n >= 6 || H < 470);
+    const tiny = phone && n >= 6;
+    table.classList.toggle('compact', compact);
+    table.classList.toggle('tiny', tiny);
+    table.parentElement.classList.toggle('many', tiny);
+    const rx = phone ? 36 : compact ? 43 : 41;
+    const ry = phone ? (tiny ? 37 : 38) : compact ? 38 : 35;
     const pos = {};
     for (const p of g.players) {
       const a = Math.PI / 2 + ((p.seat - mySeat) * 2 * Math.PI) / n;
@@ -281,9 +324,9 @@
       s.fids = new Set(p.faceDown.map((f) => f.fid));
       $('.plate', el).innerHTML = `
         <div class="top"><span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>${p.pid === S.room.you ? '<span class="you">YOU</span>' : ''}
-          <span class="flags">${p.isBot ? '<span class="bot">BOT</span>' : p.auto ? '<span class="bot" title="Autopilot is playing">AUTO</span>' : ''}<span class="dot ${p.connected || p.isBot ? '' : 'off'}" title="${p.connected || p.isBot ? 'online' : 'offline'}"></span></span></div>
-        <div class="goldline">${goldGrid(p.gold)}<span class="gold"><b>${Math.round(s.shown)}</b><small>gold</small></span></div>
-        <div class="row2"><span class="mini-back" style="background-image:url(${backFor(p.isKing ? 'king' : 'noble')})"></span>${p.handCount} cards${p.isKing ? '<span class="kt">&nbsp;· The King</span>' : ''}</div>
+          <span class="flags">${p.isBot ? '<span class="bot">BOT</span>' : p.auto ? '<span class="bot" title="Autopilot is playing">AUTO</span>' : p.learning && p.pid !== S.room.you ? '<span class="bot new" title="First game: using the guide">NEW</span>' : ''}<span class="dot ${p.connected || p.isBot ? '' : 'off'}" title="${p.connected || p.isBot ? 'online' : 'offline'}"></span></span></div>
+        <div class="goldline">${goldGrid(p.gold)}<span class="gold"><b>${Math.round(s.shown)}</b><small>gold</small></span>
+          <span class="cnt" title="${p.handCount} cards in hand"><span class="mini-back" style="background-image:url(${backFor(p.isKing ? 'king' : 'noble')})"></span>${p.handCount}</span></div>
         ${fd ? `<div class="fd">${fd}</div>` : ''}
         ${chips.length ? `<div class="chips">${chips.join('')}</div>` : ''}`;
 
@@ -368,7 +411,9 @@
     }
     for (const d of g.debts) if (d.debtor !== me.pid && d.owner !== me.pid) parts.push(`<button class="btn small" data-debt="${d.id}" ${me.gold < 200 ? 'disabled' : ''}>Pay ${esc(pname(d.owner))} 200 to free ${esc(pname(d.debtor))}</button>`);
     for (const s of me.statuses) parts.push(`<span class="chip">${esc(s.label)}</span>`);
-    if (g.phase !== 'over') parts.push('<span class="muted hint">Click a card to play it, or place it face down as a “Knight”.</span>');
+    const step = guide.isOn() ? guide.nextStep() : '';
+    if (step) parts.push(`<span class="next-step">${esc(step)}</span>`);
+    else if (g.phase !== 'over') parts.push('<span class="muted hint">Click a card to play it, or place it face down as a “Knight”.</span>');
     $('#me-info').innerHTML = parts.join('');
   }
   $('#me-info').addEventListener('click', (e) => {
@@ -618,6 +663,7 @@
   }
 
   // ───────── top actions ─────────
+  $('#guide-btn').onclick = () => guide.openMenu();
   $('#skip').onclick = () => { if (confirm('Answer every open question with its default choice?')) send('host:skip'); };
   $('#auto-me').onclick = () => { const me = meP(); send('auto', { on: !(me && me.auto) }); };
   $('#table').addEventListener('click', (e) => {
@@ -667,16 +713,40 @@
   }
 
   // ───────── rules ─────────
+  // The rules never list the whole deck (discovering cards is part of the fun);
+  // during a game they collect the cards you have actually seen.
+  const seenCards = new Set();
+  function collectSeen() {
+    const g = G();
+    for (const c of g.hand) seenCards.add(c.id);
+    if (g.resolving) seenCards.add(g.resolving.cardId);
+    for (const d of ['king', 'noble']) if (g.decks[d].top) seenCards.add(g.decks[d].top);
+    for (const p of g.players) for (const f of p.faceDown) if (f.known) seenCards.add(f.known);
+    for (const pr of g.prompts) { for (const c of pr.cards || []) seenCards.add(c.id); if (pr.offered) seenCards.add(pr.offered.id); }
+  }
   document.addEventListener('click', (e) => { if (e.target.closest('[data-action="rules"]')) showRules(); });
   function showRules() {
-    const list = Object.values(catalog);
-    const gal = (deck) => list.filter((c) => c.deck === deck).map((c) => `<figure><img src="${art(c.id)}" alt="${esc(c.name)}" data-zoom="${c.id}" loading="lazy"><figcaption>${esc(c.name)} ×${c.copies}</figcaption></figure>`).join('');
-    openModal('rules', `<div class="rules"><h2>How to rule a kingdom</h2><div class="dots"></div>
-      <p>${MIN_PLAYERS}–${MAX_PLAYERS} players, 4 rounds. <b>End the game as The King to win.</b> You become King by having <b>more gold than the current King</b> (or through Betray the King / People’s Champion).</p>
-      <h3>Setup</h3><ul><li>One random player is The King with 1000 gold; Nobles start with 600.</li><li>Everyone holds 8 cards: the King draws King cards, Nobles draw Noble cards.</li></ul>
-      <h3>Each round</h3><ul><li><b>Playing phase:</b> The King goes first and plays 3 cards (2 if there are only 3 nobles), then each Noble plays 2. Rounds 1 and 3 go clockwise, rounds 2 and 4 counter-clockwise. After playing you draw back up.</li>
-      <li><b>Negotiation phase</b> (not after round 4): up to 2 minutes to trade gold (max 400 received per player), exchange cards one-for-one, and make deals. Nothing is binding, so lie freely.</li></ul>
-      <h3>Rules to remember</h3><ul><li>Cards with a dotted line: choose ONE of the two options.</li><li>Gold stays between 0 and 2000. At 0 you keep playing.</li>
+    const inGame = !!S.game;
+    const seenList = [...seenCards].map((id) => catalog[id]).filter(Boolean)
+      .sort((a, b) => (a.deck === b.deck ? a.name.localeCompare(b.name) : a.deck === 'noble' ? -1 : 1));
+    const kinds = Object.keys(catalog).length;
+    const cards = inGame
+      ? `<h3>Cards you’ve seen this game <span class="muted">(${seenList.length} of ${kinds} kinds)</span></h3>
+         ${seenList.length ? `<div class="gallery">${seenList.map((c) => `<figure><img src="${art(c.id)}" alt="${esc(c.name)}" data-zoom="${c.id}" loading="lazy"><figcaption>${esc(c.name)}</figcaption></figure>`).join('')}</div>` : '<p class="muted">None yet.</p>'}
+         <p class="muted">The rest stay a surprise. Click any card on the table or in your hand to read it.</p>`
+      : '<h3>The cards</h3><p>There are 99 cards: 74 Noble cards and 25 King cards. Finding out what they do is part of the fun, so they aren’t listed here. During a game, <b>click any card</b> to read it, and the cards you have seen collect on this page.</p>';
+    openModal('rules', `<div class="rules"><h2>How to play</h2><div class="dots"></div>
+      ${inGame ? '<div class="rules-actions"><button class="btn primary" data-rules="tour">Take the visual tour</button></div>' : ''}
+      <div class="short"><b>The short version</b><ol>
+        <li><b>Be The King when round four ends.</b> That’s the only way to win.</li>
+        <li><b>Get more gold than the King</b> and you instantly take the crown (and their seat).</li>
+        <li>On your turn, <b>play 2 cards</b> (the King plays 3). Each card says what it does.</li>
+        <li>Between rounds, <b>negotiate</b>: trade gold and cards, make promises, break them.</li>
+      </ol></div>
+      <h3>Setup</h3><ul><li>${MIN_PLAYERS} to ${MAX_PLAYERS} players. One random player is The King with 1000 gold; Nobles start with 600.</li><li>Everyone holds 8 cards: the King draws King cards, Nobles draw Noble cards.</li></ul>
+      <h3>Each round</h3><ul><li><b>Playing:</b> The King goes first and plays 3 cards (2 if there are only 3 nobles), then each Noble plays 2. Rounds 1 and 3 go clockwise, rounds 2 and 4 counter-clockwise. After playing you draw back up.</li>
+      <li><b>Negotiation</b> (not after round 4): up to 2 minutes to trade gold (you can receive at most 400), exchange cards one-for-one, and make deals. Nothing is binding, so lie freely.</li></ul>
+      <h3>Good to know</h3><ul><li>Cards with a dotted line: choose ONE of the two options.</li><li>Gold stays between 0 and 2000. At 0 you keep playing.</li>
       <li>Betrayal cards need vocal support from other players after they are played, or they do nothing. Not playable in round 1.</li>
       <li>Any card can be placed face down and claimed to be a Knight. Only a real Knight blocks a Betrayal. Placing one counts as a card played.</li>
       <li>When a player becomes King they swap seats and hands with the old King. Face-down Knights stay at their seat.</li>
@@ -684,8 +754,10 @@
       <li>You always hold at least 8 cards. Nobles can’t hold King cards and vice versa.</li>
       <li>The “bank” is an infinite pile of gold.</li></ul>
       <p class="muted">Spoken parts of cards (praise the King, pledge loyalty, the Royal Parrot…) are typed into the game. Say them out loud on your call too!</p>
-      <h3>Noble cards (74)</h3><div class="gallery">${gal('noble')}</div><h3>King cards (25)</h3><div class="gallery">${gal('king')}</div>
-      <p class="muted" style="margin-top:14px">Fan-made online edition of One King One Crown by Yancey Intl., used under CC BY-NC-SA 4.0. Support the creators: <a href="https://onecrown.store/" target="_blank" rel="noopener">onecrown.store</a></p></div>`);
+      ${cards}
+      <p class="muted" style="margin-top:14px">Fan-made online edition of One King One Crown by Yancey Intl., used under CC BY-NC-SA 4.0. Support the creators: <a href="https://onecrown.store/" target="_blank" rel="noopener">onecrown.store</a></p></div>`, (e) => {
+      if (e.target.closest('[data-rules="tour"]')) { closeModal(); guide.startTour(); }
+    });
   }
 
   // ───────── timers ─────────

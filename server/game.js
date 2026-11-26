@@ -17,6 +17,7 @@ class Cancel extends Error {}
 
 const DEFAULT_SETTINGS = {
   negotiationSeconds: 120, // official: 2 minutes max
+  introSeconds: 240, // longest wait for first-time players to finish the tour
   supportSeconds: 45, // window to give "vocal support" to a Betrayal
   reactionSeconds: 20, // King Maker window
   voteSeconds: 60,
@@ -44,7 +45,7 @@ class Game {
     this.uid = 0;
     this.players = {};
     for (const p of players) {
-      this.players[p.pid] = { pid: p.pid, name: p.name, isBot: !!p.isBot, auto: false, connected: true, gold: 600, hand: [] };
+      this.players[p.pid] = { pid: p.pid, name: p.name, isBot: !!p.isBot, learning: !p.isBot && !!p.learning, auto: false, connected: true, gold: 600, hand: [] };
     }
     // Deal character cards face down: whoever gets the King's character card is The King.
     const order = shuffle(players.map((p) => p.pid), rng);
@@ -73,6 +74,7 @@ class Game {
     this.lastRoll = null;
     this.resolving = null;
     this.neg = null;
+    this.intro = null;
     this.winner = null;
     this.ctx = null;
     this._chain = Promise.resolve();
@@ -442,7 +444,7 @@ class Game {
   }
 
   requestCrownCheck() {
-    if (this.phase === 'over' || this.phase === 'starting') return;
+    if (this.phase === 'over' || this.phase === 'starting' || this.phase === 'intro') return;
     this.exclusive(() => this.checkCrown()).catch((e) => this.onError(e));
   }
 
@@ -453,6 +455,7 @@ class Game {
   }
 
   async run() {
+    await this.introPhase();
     for (let r = 1; r <= 4; r++) {
       this.round = r;
       this.dir = r % 2 === 1 ? 'cw' : 'ccw';
@@ -642,6 +645,51 @@ class Game {
       this.topUp(p);
     }
     return sides;
+  }
+
+  // ───────────────────────── first-time tour ─────────────────────────
+  // Before round one, wait for players who asked for the guide to finish the quick tour
+  // (or until the time limit), so nobody is thrown into the game unprepared.
+  learnersPending() {
+    if (!this.intro) return [];
+    // a refresh or a brief drop doesn't count as leaving; someone who really leaves is put on
+    // autopilot after a minute away, which ends their wait
+    return this.seats.filter((p) => this.players[p].learning && !this.isAuto(p) && !this.intro.done.has(p));
+  }
+
+  async introPhase() {
+    const secs = this.settings.introSeconds;
+    this.intro = { endsAt: Date.now() + secs * 1000, done: new Set() };
+    const pending = this.learnersPending().filter((p) => this.players[p].connected);
+    if (!pending.length || secs <= 0) { this.intro = null; return; }
+    this.phase = 'intro';
+    this.log(`${pending.map((p) => this.name(p)).join(', ')} ${pending.length > 1 ? 'are' : 'is'} new to the game and taking the quick tour. Round one starts when they're ready.`);
+    await new Promise((res) => {
+      this.intro.finish = res;
+      this.intro.timer = setTimeout(res, secs * 1000);
+      this.checkIntro();
+    });
+    clearTimeout(this.intro.timer);
+    this.intro = null;
+  }
+
+  checkIntro() {
+    if (this.intro && this.intro.finish && !this.learnersPending().length) this.intro.finish();
+  }
+
+  introDone(pid) {
+    if (!this.players[pid] || !this.intro || this.intro.done.has(pid)) return;
+    this.intro.done.add(pid);
+    this.log(`${this.name(pid)} finished the tour.`);
+    this.checkIntro();
+  }
+
+  setLearning(pid, on) {
+    const p = this.players[pid];
+    if (!p || p.isBot) return;
+    p.learning = !!on;
+    this.checkIntro();
+    this.emit();
   }
 
   // ───────────────────────── negotiation ─────────────────────────
@@ -837,6 +885,7 @@ class Game {
       this.scheduleBot(pid);
       for (const pr of this.prompts.values()) if (pr.pid === pid) this.scheduleBot(pid);
       if (this.neg) { this.neg.ready.add(pid); this.checkNegReady(); }
+      this.checkIntro();
     }
     this.emit();
   }
@@ -845,6 +894,7 @@ class Game {
     if (!this.players[pid]) return;
     this.players[pid].connected = on;
     if (this.neg) this.checkNegReady();
+    this.checkIntro();
     this.emit();
   }
 
@@ -865,7 +915,7 @@ class Game {
       const pl = this.players[p];
       return {
         pid: p, name: pl.name, seat, gold: pl.gold, isKing: seat === 0, handCount: pl.hand.length,
-        connected: pl.connected, isBot: pl.isBot, auto: pl.auto,
+        connected: pl.connected, isBot: pl.isBot, auto: pl.auto, learning: pl.learning,
         faceDown: this.fd[seat].map((f) => ({ fid: f.fid, deck: f.card.deck, known: f.knownTo.includes(pid) ? f.card.id : null })),
         bets: this.bets.filter((b) => b.owner === p).map((b) => ({ type: b.type, target: b.target, deadline: b.deadline })),
         statuses: statuses(p),
@@ -892,6 +942,7 @@ class Game {
       },
       badBlood: this.badBlood.map((b) => ({ ...b })),
       debts: this.debts.map((d) => ({ ...d })),
+      intro: this.intro ? { endsAt: this.intro.endsAt, pending: this.learnersPending() } : null,
       negotiation: this.neg ? { endsAt: this.neg.endsAt, ready: [...this.neg.ready], received: this.neg.received } : null,
       lastRoll: this.lastRoll,
       log: this.logEntries.filter((e) => !e.to || e.to.includes(pid)).slice(-200),

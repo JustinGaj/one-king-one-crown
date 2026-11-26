@@ -17,6 +17,12 @@ action.
 
 ![The table on your turn](docs/screenshots/3-your-turn.jpg)
 
+**New to the game?** Each player can switch on the guide in the lobby (it's on by default until
+you've finished a game on that device). The guide gives a short spotlight tour of the screen before
+round one (the game waits for everyone who chose it), one-time tips the first time something
+happens, and a line above your hand that says what to do next. Only that player sees it. The
+"How to play" page doesn't list the cards; finding them is part of the fun.
+
 More in [docs/screenshots](docs/screenshots): home, lobby, card actions, negotiation, a new
 King, game over and the phone layout.
 
