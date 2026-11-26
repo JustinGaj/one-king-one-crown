@@ -9,7 +9,7 @@ friends from anywhere. Empty seats can be filled with bots.
 - All the official rules and Royal Advisor FAQ rulings. The few calls this version makes where
   the rules are silent are listed in [docs/RULES-DECISIONS.md](docs/RULES-DECISIONS.md).
 - The server enforces every rule and sends each player only what they're allowed to see (your
-  hand, your face-down Knights). Reconnect with a refresh. Autopilot covers anyone who drops out.
+  hand, your face-down Knights). Reconnect with a refresh. The computer covers anyone away for over a minute.
 
 The look follows the printed game and its box: signal red, black and white, Montserrat, and
 the faceless hooded figures. Each player sits at the table as a figure whose eyes follow the

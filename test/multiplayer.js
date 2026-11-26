@@ -25,7 +25,7 @@ async function until(fn, ms = 10000, what = 'condition') {
 }
 
 (async () => {
-  const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], { env: { ...process.env, PORT }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], { env: { ...process.env, PORT, OKOC_TEST_AUTOPILOT: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
   let errs = '';
   srv.stderr.on('data', (d) => { errs += d; });
   await new Promise((res) => srv.stdout.on('data', (d) => { if (String(d).includes('running')) res(); }));

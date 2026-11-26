@@ -220,6 +220,7 @@
     renderTop();
     renderSeats();
     renderCenter();
+    fitCenter();
     renderMe();
     renderHand();
     renderPrompt();
@@ -259,8 +260,6 @@
     const pace = S.room.settings.pace;
     sp.title = `Game speed (host). Playing ${pace}: bots think longer and each card stays on the table for a moment when slower.`;
     const me = meP();
-    $('#auto-me').classList.toggle('on', !!(me && me.auto));
-    $('#auto-me').textContent = me && me.auto ? 'Autopilot on' : 'Autopilot';
   }
 
   function goldGrid(gold) {
@@ -314,6 +313,7 @@
       el.classList.toggle('turn', !!(g.turn && g.turn.pid === p.pid));
       el.classList.toggle('me', p.pid === S.room.you);
       el.classList.toggle('off', !p.connected && !p.isBot);
+      s.pos = pos[p.pid];
       el.style.left = pos[p.pid].x + '%';
       el.style.top = pos[p.pid].y + '%';
 
@@ -332,7 +332,7 @@
       s.fids = new Set(p.faceDown.map((f) => f.fid));
       $('.plate', el).innerHTML = `
         <div class="top"><span class="nm" title="${esc(p.name)}">${esc(p.name)}</span>${p.pid === S.room.you ? '<span class="you">YOU</span>' : ''}
-          <span class="flags">${p.isBot ? '<span class="bot">BOT</span>' : p.auto ? '<span class="bot" title="Autopilot is playing">AUTO</span>' : p.learning && p.pid !== S.room.you ? '<span class="bot new" title="First game: using the guide">NEW</span>' : ''}<span class="dot ${p.connected || p.isBot ? '' : 'off'}" title="${p.connected || p.isBot ? 'online' : 'offline'}"></span></span></div>
+          <span class="flags">${p.isBot ? '<span class="bot">BOT</span>' : p.auto ? '<span class="bot" title="Away for over a minute: the computer is playing until they return">AWAY</span>' : p.learning && p.pid !== S.room.you ? '<span class="bot new" title="First game: using the guide">NEW</span>' : ''}<span class="dot ${p.connected || p.isBot ? '' : 'off'}" title="${p.connected || p.isBot ? 'online' : 'offline'}"></span></span></div>
         <div class="goldline">${goldGrid(p.gold)}<span class="gold"><b>${Math.round(s.shown)}</b><small>gold</small></span>
           <span class="cnt" title="${p.handCount} cards in hand"><span class="mini-back" style="background-image:url(${backFor(p.isKing ? 'king' : 'noble')})"></span>${p.handCount}</span></div>
         ${fd ? `<div class="fd">${fd}</div>` : ''}
@@ -404,6 +404,37 @@
     const others = g.waiting.filter((w) => w.pid !== S.room.you);
     const uniq = [...new Map(others.map((x) => [x.pid, x])).values()];
     $('#waiting').textContent = uniq.length ? `Waiting for ${uniq.slice(0, 4).map((x) => x.name).join(', ')}${uniq.length > 4 ? ' and others' : ''}` : '';
+  }
+
+  // Fit the middle of the table (decks, die and the card being played) into the free space
+  // between the seats above and below it, so a played card is never hidden behind a name plate.
+  function fitCenter() {
+    const table = $('#table');
+    const c = $('#center');
+    if (!table || !c || !G()) return;
+    const W = table.clientWidth;
+    const H = table.clientHeight;
+    const cw = c.offsetWidth; // layout size, before any scaling
+    const ch = c.offsetHeight;
+    if (!cw || !ch || !W || !H) return;
+    let top = H * 0.05;
+    let bottom = H * 0.97;
+    const half = Math.min(cw, W * 0.62) / 2 + 10;
+    for (const s of seatEls.values()) {
+      if (!s.pos) continue;
+      const plate = $('.plate', s.el);
+      const fig = $('.fig', s.el);
+      const w = s.el.offsetWidth;
+      const h = plate ? plate.offsetHeight : s.el.offsetHeight;
+      const x = (s.pos.x / 100) * W;
+      const y = (s.pos.y / 100) * H;
+      if (Math.abs(x - W / 2) > half + w / 2) continue; // off to the side, not above or below the middle
+      if (y < H / 2) top = Math.max(top, y + 0.58 * h + 8);
+      else bottom = Math.min(bottom, y - 0.42 * h - (fig ? fig.offsetHeight * 0.62 : 0) - 4);
+    }
+    const scale = Math.max(0.3, Math.min(1, (bottom - top - 12) / ch, (W * 0.64) / cw));
+    c.style.top = Math.round((top + bottom) / 2) + 'px';
+    c.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(3)})`;
   }
 
   function renderMe() {
@@ -501,11 +532,11 @@
         } else {
           acts += `<button class="btn${c.faceDownOnly ? ' primary' : ''}" data-act="fd">${c.faceDownOnly ? 'Place Knight face down' : 'Place face down (claim it’s a Knight)'}</button>`;
         }
-        acts += '<div class="explain"><b>What does face down do?</b> The card sits hidden in front of '
+        acts += '<details class="explain"><summary>What does face down do?</summary><div>The card sits hidden in front of '
           + (me.isKing ? 'the noble you pick' : 'you')
           + ' and everyone is told it is a <b>Knight</b>. A Knight blocks one <b>Betrayal</b> (the card that takes all of a noble’s gold). '
           + 'If it really is a Knight, the next Betrayal against that player fails and the Knight is used up. If it is any other card, it is a <b>bluff</b>: it may scare people off, but blocks nothing. '
-          + 'Either way it counts as one of your plays, a handy way to use a turn without triggering a card you don’t want.</div>';
+          + 'Either way it counts as one of your plays, a handy way to use a turn without triggering a card you don’t want.</div></details>';
       }
     } else if (g.phase === 'play') {
       acts += `<p class="fine">${g.turn && g.turn.pid === S.room.you ? 'Wait for the current card to finish.' : 'You can play cards on your turn.'}</p>`;
@@ -517,7 +548,7 @@
       }
       if (!me.isKing) acts += `<h3>Offer an exchange to…</h3><div class="opts">${nobles.map((p) => `<button class="btn" data-act="trade" data-target="${p.pid}">${esc(p.name)}</button>`).join('') || '<span class="fine">No other nobles.</span>'}</div><div class="fine">Nobles swap cards one for one: they pick one of theirs to give back, or decline.</div>`;
       else acts += '<div class="fine">The King can’t swap cards (nobles can’t hold King cards), but can still give gold and discard as part of a deal.</div>';
-      acts += `<h3>Discard as part of a deal with…</h3><div class="opts">${g.players.filter((p) => p.pid !== me.pid).map((p) => `<button class="btn" data-act="deal" data-target="${p.pid}">${esc(p.name)}</button>`).join('')}</div><div class="explain"><b>Why discard?</b> It proves a promise. For example: “I’ll throw away my Betrayal if you give me 200”, or a noble pays the King to get rid of a nasty King card. The discarded card lands face up on the discard pile for everyone to see, and you draw a replacement. You may only discard as part of a deal, and the other player must confirm.</div>`;
+      acts += `<h3>Discard as part of a deal with…</h3><div class="opts">${g.players.filter((p) => p.pid !== me.pid).map((p) => `<button class="btn" data-act="deal" data-target="${p.pid}">${esc(p.name)}</button>`).join('')}</div><details class="explain"><summary>Why discard a card?</summary><div>It proves a promise. For example: “I’ll throw away my Betrayal if you give me 200”, or a noble pays the King to get rid of a nasty King card. The discarded card lands face up on the discard pile for everyone to see, and you draw a replacement. You may only discard as part of a deal, and the other player must confirm.</div></details>`;
     }
     const plain = PLAIN[c.id] ? `<div class="explain">${PLAIN[c.id]}</div>` : '';
     openModal('card', `<div class="zoom"><img src="${art(c.id)}" alt="${esc(def.name || c.id)}"><div class="actions"><h2>${esc(def.name || c.id)}</h2><div class="dots"></div>${def.text ? `<div class="text">${esc(def.text)}</div>` : ''}${plain}${acts}</div></div>`, async (e) => {
@@ -701,18 +732,9 @@
   // ───────── top actions ─────────
   $('#guide-btn').onclick = () => guide.openMenu();
   $('#skip').onclick = () => { if (confirm('Answer every open question with its default choice?')) send('host:skip'); };
-  $('#auto-me').onclick = () => { const me = meP(); send('auto', { on: !(me && me.auto) }); };
   $('#table').addEventListener('click', (e) => {
     const z = e.target.closest('[data-zoom]');
     if (z) return zoomCard(z.dataset.zoom);
-    const s = e.target.closest('[data-seat]');
-    if (s && isHost() && s.dataset.seat !== S.room.you) {
-      const p = P(s.dataset.seat);
-      if (p && !p.isBot) openModal('seat', `<h2>${esc(p.name)}</h2><p>Autopilot lets the computer play for a player who is away.</p><button class="btn primary" data-auto="${p.pid}">${p.auto ? 'Turn autopilot off' : 'Turn autopilot on'}</button>`, (ev) => {
-        const b = ev.target.closest('[data-auto]');
-        if (b) { send('auto', { target: b.dataset.auto, on: !p.auto }); closeModal(); }
-      });
-    }
   });
 
   // ───────── modal ─────────
@@ -811,7 +833,7 @@
       el.style.width = Math.min(100, (left / Number(el.dataset.total)) * 100) + '%';
     }
   }, 250);
-  window.addEventListener('resize', () => { if (G()) renderSeats(); });
+  window.addEventListener('resize', () => { if (G()) { renderSeats(); fitCenter(); } });
 
   if (!session) show('home');
 })();

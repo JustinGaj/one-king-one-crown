@@ -99,7 +99,9 @@ io.on('connection', (socket) => {
   on('host:start', () => need().start(pid));
   on('host:lobby', () => need().backToLobby(pid));
   on('host:skip', () => need().skipWaits(pid));
-  on('auto', ({ target, on: v }) => need().setAuto(pid, target || pid, !!v));
+  // Players can't hand their seat to the computer; only someone away for a minute is covered
+  // automatically. The automated multiplayer test switches it on to play a whole game quickly.
+  if (process.env.OKOC_TEST_AUTOPILOT === '1') on('auto', ({ target, on: v }) => need().setAuto(pid, target || pid, !!v));
   on('chat', ({ text }) => need().lobbyMessage(pid, text));
   on('tutorial', ({ on: v }) => need().setTutorial(pid, !!v));
   on('tour:done', () => need().tourDone(pid));

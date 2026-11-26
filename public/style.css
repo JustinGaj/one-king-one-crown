@@ -436,7 +436,7 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--red); outli
   .seat .gold { font-size: 15px; }
   .seat .mini-grid { display: none; }
   .seat .row2 { font-size: 9px; }
-  .center { flex-direction: column; gap: 10px; transform: translate(-50%, -50%) scale(.6); }
+  .center { flex-direction: column; gap: 10px; }
   .seat .flags .bot, .seat .kt { display: none; }
   .me-bar { position: sticky; bottom: 0; }
   .hand { justify-content: flex-start; padding: 16px 10px 8px; overflow-x: auto; overflow-y: hidden; height: calc(var(--card-w) * 1.414 + 30px); }
@@ -468,7 +468,6 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--red); outli
 .table.compact .seat .goldline { margin: 2px 0 0; }
 .table.compact .seat .fig > * { --w: 38px; }
 .table.compact .seat .fd .k { width: 17px; height: 24px; }
-.table.compact .center { transform: translate(-50%, -50%) scale(.8); }
 
 /* ───────── lobby: guide switch ───────── */
 .guide-opt { display: flex; align-items: center; gap: 12px; border: 3px solid var(--ink); border-radius: 12px; padding: 10px 12px; background: var(--soft); }
@@ -553,7 +552,6 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--red); outli
   .table.tiny .seat .chips .chip:not(:first-child) { display: none; }
   .table.tiny .seat .fig > * { --w: 28px; }
   .table.tiny .seat .fd .k { width: 13px; height: 18px; }
-  .table.tiny .center { transform: translate(-50%, -50%) scale(.5); }
 }
 
 /* host's in-game speed switch */
@@ -567,3 +565,16 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--red); outli
 @media (max-width: 820px) {
   .side:has(.neg:not(.hidden)) { height: 540px; } /* room for the deal panel and the chat */
 }
+
+/* the middle keeps a fixed slot for the card being played, so its size (and scale) stays steady */
+#c-mid { min-width: 130px; min-height: 212px; display: flex; align-items: center; justify-content: center; }
+.resolving img { aspect-ratio: 522 / 738; }
+
+/* explanations that open on demand */
+details.explain { padding: 0; }
+details.explain > summary { list-style: none; cursor: pointer; padding: 8px 30px 8px 10px; font-weight: 900; position: relative; user-select: none; }
+details.explain > summary::-webkit-details-marker { display: none; }
+details.explain > summary::after { content: ""; position: absolute; right: 12px; top: 50%; width: 8px; height: 8px; margin-top: -6px;
+  border-right: 3px solid var(--ink); border-bottom: 3px solid var(--ink); transform: rotate(45deg); transition: transform .2s var(--ease); }
+details.explain[open] > summary::after { transform: rotate(-135deg); margin-top: -2px; }
+details.explain > div { padding: 0 10px 9px; animation: rise-in .25s var(--ease); }
