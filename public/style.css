@@ -381,15 +381,15 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--red); outli
 
 /* ───────── negotiation ───────── */
 .neg {
-  position: fixed; right: 10px; top: 66px; z-index: 20; width: 290px; max-height: calc(100vh - 290px); overflow-y: auto; background: var(--paper); color: var(--ink);
-  border-radius: 16px; border: 4px solid var(--ink); padding: 12px 14px; box-shadow: 0 0 0 3px var(--paper), 0 16px 40px rgba(0, 0, 0, .6);
-  animation: slide-in-r .45s var(--ease);
+  background: var(--paper); color: var(--ink); border-radius: 14px; border: 3px solid var(--ink); padding: 10px 12px; margin: 10px 10px 4px;
+  box-shadow: 0 0 0 3px var(--red); animation: slide-in-r .45s var(--ease); flex: none;
 }
 @keyframes slide-in-r { from { opacity: 0; transform: translateX(40px); } }
 .neg h2 { margin: 0; font-size: 16px; font-weight: 900; display: flex; align-items: center; gap: 8px; text-transform: uppercase; }
 .neg h2 img { width: 30px; animation: tilt 2.4s ease-in-out infinite; }
 .neg .t { font-size: 24px; font-weight: 900; font-variant-numeric: tabular-nums; margin-left: auto; background: var(--red); color: var(--paper); padding: 0 8px; border-radius: 8px; }
 .neg p { margin: 6px 0; font-size: 12px; font-weight: 600; color: #222; }
+.neg p.small { font-size: 11px; color: #555; }
 .neg .give { display: flex; gap: 6px; margin: 8px 0; }
 .neg select { padding: 6px; flex: 1; min-width: 0; border-width: 2px; }
 .neg .btn { padding: 6px 10px; }
@@ -413,7 +413,6 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--red); outli
 #game > *, .layout > *, .me-bar > * { min-width: 0; }
 @media (max-width: 1100px) {
   .layout { grid-template-columns: 1fr 250px; }
-  .neg { width: 232px; }
   .seat { width: 146px; }
   .seat .gold { font-size: 18px; }
   :root { --card-w: 90px; }
@@ -439,7 +438,6 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--red); outli
   .seat .row2 { font-size: 9px; }
   .center { flex-direction: column; gap: 10px; transform: translate(-50%, -50%) scale(.6); }
   .seat .flags .bot, .seat .kt { display: none; }
-  .neg { position: fixed; right: 8px; left: 8px; top: auto; bottom: 8px; width: auto; max-height: 60vh; }
   .me-bar { position: sticky; bottom: 0; }
   .hand { justify-content: flex-start; padding: 16px 10px 8px; overflow-x: auto; overflow-y: hidden; height: calc(var(--card-w) * 1.414 + 30px); }
   .me-bar { padding-top: 4px; }
@@ -485,7 +483,7 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--red); outli
 
 /* ───────── guide: the "what now?" line ───────── */
 .me-info .next-step { margin-left: auto; background: var(--paper); color: var(--ink); border-radius: 8px; padding: 4px 10px 4px 30px; font-size: 12px; font-weight: 800; position: relative;
-  max-width: 62%; animation: rise-in .4s var(--ease); }
+  max-width: 62%; }
 .me-info .next-step::before { content: "?"; position: absolute; left: 6px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; border-radius: 50%; background: var(--red);
   color: var(--paper); font-size: 11px; font-weight: 900; display: grid; place-items: center; }
 .topbar .btn#guide-btn.on { background: var(--paper); color: var(--ink); }
@@ -562,3 +560,10 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--red); outli
 .speed-sel { background: var(--ink); color: var(--paper); border: 2px solid var(--paper); border-radius: 8px; padding: 4px 8px; font-size: 11px; font-weight: 800;
   text-transform: uppercase; letter-spacing: .03em; cursor: pointer; }
 .speed-sel:focus { outline: 2px solid var(--red); }
+
+/* plain-language notes in the card window */
+.zoom .explain { background: var(--soft); border-left: 4px solid var(--red); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; font-weight: 600; line-height: 1.45; color: #222; }
+.zoom .explain b { font-weight: 900; }
+@media (max-width: 820px) {
+  .side:has(.neg:not(.hidden)) { height: 540px; } /* room for the deal panel and the chat */
+}

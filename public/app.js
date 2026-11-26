@@ -327,7 +327,7 @@
       for (const d of g.debts.filter((x) => x.debtor === p.pid)) chips.push(`<span class="chip" title="Pays ${esc(pname(d.owner))} 100 at the start of every round">Owes ${esc(pname(d.owner))}</span>`);
       const fd = p.faceDown.map((f) => {
         const fresh = !s.fids.has(f.fid);
-        return `<span class="k ${fresh ? 'new' : ''}" style="background-image:url(${backFor(f.deck)})" title="${f.known ? 'You know this is: ' + esc(cname(f.known)) : 'Face-down card, claimed to be a Knight'}">${f.known ? icon('eye') : ''}</span>`;
+        return `<span class="k ${fresh ? 'new' : ''}" style="background-image:url(${backFor(f.deck)})" title="${f.known ? 'You know this is: ' + esc(cname(f.known)) : 'Face-down card. Its owner claims it is a Knight, which would block the next Betrayal against this player. It might be a bluff.'}">${f.known ? icon('eye') : ''}</span>`;
       }).join('');
       s.fids = new Set(p.faceDown.map((f) => f.fid));
       $('.plate', el).innerHTML = `
@@ -411,8 +411,8 @@
     const me = meP();
     if (!me) { $('#me-info').innerHTML = '<span class="muted">Spectating</span>'; return; }
     const parts = [me.isKing ? `<span class="role king">${icon('crown')}The King</span>` : '<span class="role">Noble</span>', `<span><span class="big">${me.gold}</span> gold</span>`];
-    if (g.turn && g.turn.pid === me.pid) parts.push(`<span class="yourturn">Your turn: play ${g.turn.playsLeft} more card${g.turn.playsLeft === 1 ? '' : 's'}</span>`);
-    else if (g.phase === 'play' && g.turn) parts.push(`<span class="muted">Waiting for ${esc(pname(g.turn.pid))}…</span>`);
+    const myTurnNow = g.turn && g.turn.pid === me.pid;
+    if (myTurnNow) parts.push(`<span class="yourturn">Your turn: play ${g.turn.playsLeft} more card${g.turn.playsLeft === 1 ? '' : 's'}</span>`);
     for (const b of g.badBlood) if (b.a === me.pid || b.b === me.pid) {
       const other = b.a === me.pid ? b.b : b.a;
       parts.push(`<button class="btn small" data-bb="${b.id}" ${me.gold < 200 ? 'disabled' : ''} title="Ends ${esc(pname(b.owner))}'s Bad Blood">Give ${esc(pname(other))} 200 (end Bad Blood)</button>`);
@@ -421,9 +421,11 @@
     for (const s of me.statuses) parts.push(`<span class="chip">${esc(s.label)}</span>`);
     const step = guide.isOn() ? guide.nextStep() : '';
     if (step) parts.push(`<span class="next-step">${esc(step)}</span>`);
-    else if (g.phase !== 'over') parts.push('<span class="muted hint">Click a card to play it, or place it face down as a “Knight”.</span>');
-    $('#me-info').innerHTML = parts.join('');
+    else if (myTurnNow) parts.push('<span class="muted hint">Click a card to play it, or place it face down as a “Knight”.</span>');
+    const html = parts.join('');
+    if (html !== meHtml) { meHtml = html; $('#me-info').innerHTML = html; }
   }
+  let meHtml = '';
   $('#me-info').addEventListener('click', (e) => {
     const bb = e.target.closest('[data-bb]'); if (bb) send('badBlood', { id: Number(bb.dataset.bb) });
     const d = e.target.closest('[data-debt]'); if (d) send('freeDebt', { id: Number(d.dataset.debt) });
@@ -476,6 +478,13 @@
   $('#hand').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { const el = e.target.closest('[data-card]'); if (el) { e.preventDefault(); openCard(Number(el.dataset.card)); } } });
 
   // ───────── card actions ─────────
+  // plain-language notes for the cards new players ask about
+  const PLAIN = {
+    betrayal: '<b>In plain words:</b> pick another noble and take <b>all</b> their gold. Right after you play it, the other players get a “support” button: if nobody backs you, it does nothing. A real Knight in front of your target blocks it. Can’t be used in round one.',
+    'betray-the-king': '<b>In plain words:</b> try to swap places with the King. You need two players to back you, then the King rolls: 1–3 you become King and swap gold; 4–6 the King stays and gains 200.',
+    knight: '<b>In plain words:</b> this card only works face down, in front of you. It quietly protects you from the next Betrayal played on you. Others can’t tell it apart from a bluff.',
+    'king-knight': '<b>In plain words:</b> place it face down in front of a noble you want to protect. It blocks the next Betrayal against them, and they can’t look at it.',
+  };
   function openCard(uid) {
     const g = G();
     const c = g.hand.find((x) => x.uid === uid);
@@ -492,7 +501,11 @@
         } else {
           acts += `<button class="btn${c.faceDownOnly ? ' primary' : ''}" data-act="fd">${c.faceDownOnly ? 'Place Knight face down' : 'Place face down (claim it’s a Knight)'}</button>`;
         }
-        acts += '<div class="fine">A face-down card counts as a card played. Only a real Knight protects against Betrayal.</div>';
+        acts += '<div class="explain"><b>What does face down do?</b> The card sits hidden in front of '
+          + (me.isKing ? 'the noble you pick' : 'you')
+          + ' and everyone is told it is a <b>Knight</b>. A Knight blocks one <b>Betrayal</b> (the card that takes all of a noble’s gold). '
+          + 'If it really is a Knight, the next Betrayal against that player fails and the Knight is used up. If it is any other card, it is a <b>bluff</b>: it may scare people off, but blocks nothing. '
+          + 'Either way it counts as one of your plays, a handy way to use a turn without triggering a card you don’t want.</div>';
       }
     } else if (g.phase === 'play') {
       acts += `<p class="fine">${g.turn && g.turn.pid === S.room.you ? 'Wait for the current card to finish.' : 'You can play cards on your turn.'}</p>`;
@@ -502,10 +515,12 @@
       if (c.id === 'royal-bomb') {
         acts += `<h3>Royal Bomb</h3><div class="opts">${nobles.map((p) => `<button class="btn" data-act="bomb-give" data-target="${p.pid}">Give to ${esc(p.name)}</button>`).join('')}<button class="btn" data-act="bomb-discard">Discard it</button></div>`;
       }
-      if (!me.isKing) acts += `<h3>Offer an exchange to…</h3><div class="opts">${nobles.map((p) => `<button class="btn" data-act="trade" data-target="${p.pid}">${esc(p.name)}</button>`).join('') || '<span class="fine">No other nobles.</span>'}</div><div class="fine">They pick one of their cards to give back (or decline).</div>`;
-      acts += `<h3>Discard as part of a deal with…</h3><div class="opts">${g.players.filter((p) => p.pid !== me.pid).map((p) => `<button class="btn" data-act="deal" data-target="${p.pid}">${esc(p.name)}</button>`).join('')}</div><div class="fine">You may only discard as part of a deal; they must confirm. You draw a replacement.</div>`;
+      if (!me.isKing) acts += `<h3>Offer an exchange to…</h3><div class="opts">${nobles.map((p) => `<button class="btn" data-act="trade" data-target="${p.pid}">${esc(p.name)}</button>`).join('') || '<span class="fine">No other nobles.</span>'}</div><div class="fine">Nobles swap cards one for one: they pick one of theirs to give back, or decline.</div>`;
+      else acts += '<div class="fine">The King can’t swap cards (nobles can’t hold King cards), but can still give gold and discard as part of a deal.</div>';
+      acts += `<h3>Discard as part of a deal with…</h3><div class="opts">${g.players.filter((p) => p.pid !== me.pid).map((p) => `<button class="btn" data-act="deal" data-target="${p.pid}">${esc(p.name)}</button>`).join('')}</div><div class="explain"><b>Why discard?</b> It proves a promise. For example: “I’ll throw away my Betrayal if you give me 200”, or a noble pays the King to get rid of a nasty King card. The discarded card lands face up on the discard pile for everyone to see, and you draw a replacement. You may only discard as part of a deal, and the other player must confirm.</div>`;
     }
-    openModal('card', `<div class="zoom"><img src="${art(c.id)}" alt="${esc(def.name || c.id)}"><div class="actions"><h2>${esc(def.name || c.id)}</h2><div class="dots"></div>${def.text ? `<div class="text">${esc(def.text)}</div>` : ''}${acts}</div></div>`, async (e) => {
+    const plain = PLAIN[c.id] ? `<div class="explain">${PLAIN[c.id]}</div>` : '';
+    openModal('card', `<div class="zoom"><img src="${art(c.id)}" alt="${esc(def.name || c.id)}"><div class="actions"><h2>${esc(def.name || c.id)}</h2><div class="dots"></div>${def.text ? `<div class="text">${esc(def.text)}</div>` : ''}${plain}${acts}</div></div>`, async (e) => {
       const b = e.target.closest('[data-act]');
       if (!b) return;
       const t = b.dataset.target;
@@ -550,8 +565,7 @@
       body += `<div class="opts"><button class="btn primary roll-btn" data-v="true"><span class="die">${dieHtml(5)}</span>Roll the die</button></div>`;
     } else if (p.kind === 'say') {
       body += `<textarea maxlength="240" ${p.exact ? 'readonly' : ''}>${esc(p.prefill || '')}</textarea>
-        ${p.exact ? '<p style="font-size:12px">Say it out loud on your call, too!</p>' : ''}
-        <div class="opts"><button class="btn primary" data-say>Say it</button>${p.allowRefuse ? `<button class="btn" data-v='"refuse"' ${p.refuseDisabled ? 'disabled' : ''}>${esc(p.refuseLabel || 'Refuse')}${p.refuseDisabled ? '<span class="why">You can’t afford to refuse</span>' : ''}</button>` : ''}${cancel}</div>`;
+        <div class="opts"><button class="btn primary" data-say>${p.spoken ? 'I said it' : 'Done'}</button>${p.allowRefuse ? `<button class="btn" data-v='"refuse"' ${p.refuseDisabled ? 'disabled' : ''}>${esc(p.refuseLabel || 'Refuse')}${p.refuseDisabled ? '<span class="why">You can’t afford to refuse</span>' : ''}</button>` : ''}${cancel}</div>`;
     }
     if (p.endsAt) body += `<div class="bar"><i data-bar="${p.endsAt}" data-total="${(p.timeoutSec || 30) * 1000}"></i></div>`;
     el.innerHTML = body;
@@ -579,18 +593,24 @@
   function renderNeg() {
     const g = G();
     const el = $('#neg');
-    if (g.phase !== 'negotiation' || !meP()) { el.classList.add('hidden'); negBuiltFor = null; return; }
+    if (g.phase !== 'negotiation' || !meP()) {
+      el.classList.add('hidden');
+      if (negBuiltFor && chatForNeg && activeTab === 'chat') showTab('log');
+      negBuiltFor = null; chatForNeg = false;
+      return;
+    }
     el.classList.remove('hidden');
     const me = meP();
     const others = g.players.filter((p) => p.pid !== me.pid);
     const sig = g.round + ':' + others.map((p) => p.pid).join(',');
     if (negBuiltFor !== sig) {
       negBuiltFor = sig;
+      if (activeTab !== 'chat') { showTab('chat'); chatForNeg = true; } // deals happen in chat, so keep it in view
       el.innerHTML = `<h2><img src="/art/hourglass.png" alt="">Negotiation <span class="t" data-ends="${g.negotiation.endsAt}"></span></h2>
-        <p>Trade gold, exchange cards, win support for a Betrayal. <b>No deal is binding.</b> A player can receive at most 400 gold per phase.</p>
+        <p><b>Nothing is binding.</b> Each player can receive at most 400 gold.</p>
         <div class="give"><select id="give-to">${others.map((p) => `<option value="${p.pid}">${esc(p.name)}</option>`).join('')}</select>
         <select id="give-amt">${[100, 200, 300, 400].map((v) => `<option value="${v}">${v}</option>`).join('')}</select><button class="btn" id="give-btn">Give</button></div>
-        <p>Click a card in your hand to offer an exchange or a deal discard.</p>
+        <p class="small">Click a card in your hand to swap it or discard it as part of a deal.</p>
         <button class="btn primary" id="neg-ready"></button><div class="ready" id="neg-who"></div>`;
       $('#give-btn').onclick = () => {
         const to = $('#give-to').value; const amount = Number($('#give-amt').value);
@@ -631,14 +651,19 @@
     $('#chat-badge').textContent = unread;
     $('#chat-badge').classList.toggle('hidden', unread <= 0);
   }
+  let chatForNeg = false;
+  function showTab(name, focus) {
+    activeTab = name;
+    document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x.dataset.tab === name));
+    $('#log').classList.toggle('hidden', name !== 'log');
+    $('#chat').classList.toggle('hidden', name !== 'chat');
+    if (name === 'chat' && G()) { renderSideChat(); if (focus) $('#chat input').focus(); }
+  }
   document.querySelector('.tabs').addEventListener('click', (e) => {
     const t = e.target.closest('[data-tab]');
     if (!t) return;
-    activeTab = t.dataset.tab;
-    document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x === t));
-    $('#log').classList.toggle('hidden', activeTab !== 'log');
-    $('#chat').classList.toggle('hidden', activeTab !== 'chat');
-    if (activeTab === 'chat') { renderSideChat(); $('#chat input').focus(); }
+    chatForNeg = false; // the player chose a tab themselves
+    showTab(t.dataset.tab, true);
   });
 
   // ───────── announcements (round, new King, negotiation, your turn) ─────────
@@ -757,6 +782,10 @@
       <h3>Setup</h3><ul><li>${MIN_PLAYERS} to ${MAX_PLAYERS} players. One random player is The King with 1000 gold; Nobles start with 600.</li><li>Everyone holds 8 cards: the King draws King cards, Nobles draw Noble cards.</li></ul>
       <h3>Each round</h3><ul><li><b>Playing:</b> The King goes first and plays 3 cards (2 if there are only 3 nobles), then each Noble plays 2. Rounds 1 and 3 go clockwise, rounds 2 and 4 counter-clockwise. After playing you draw back up.</li>
       <li><b>Negotiation</b> (not after round 4): up to 2 minutes to trade gold (you can receive at most 400), exchange cards one-for-one, and make deals. Nothing is binding, so lie freely.</li></ul>
+      <h3>Betrayal, Knights and bluffs</h3><ul>
+      <li><b>Betrayal</b> takes <b>all</b> the gold of another noble, but only if someone else speaks up to support it right after it’s played. Not allowed in round one.</li>
+      <li>A <b>Knight</b> is a card you place face down. It blocks the next Betrayal against the player it sits in front of, then it’s used up. The King can place Knights in front of nobles to protect them.</li>
+      <li>You can place <b>any</b> card face down and say it’s a Knight. Nobody can tell. A fake one blocks nothing, but it can scare off a Betrayal, and it uses up a play without triggering the card.</li></ul>
       <h3>Good to know</h3><ul><li>Cards with a dotted line: choose ONE of the two options.</li><li>Gold stays between 0 and 2000. At 0 you keep playing.</li>
       <li>Betrayal cards need vocal support from other players after they are played, or they do nothing. Not playable in round 1.</li>
       <li>Any card can be placed face down and claimed to be a Knight. Only a real Knight blocks a Betrayal. Placing one counts as a card played.</li>

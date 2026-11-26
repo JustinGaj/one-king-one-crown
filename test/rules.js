@@ -353,6 +353,25 @@ const tests = {
     assert.deepStrictEqual([g.gold('p1'), g.gold('p2')].sort(), [300, 600], 'exactly one tied noble is the scapegoat');
     assert.strictEqual(g.gold('p3'), 600);
   },
+  async 'Royal Parrot: the King judges whether it was really said'() {
+    let g = setup();
+    script = pickBy([[/who is your parrot/, 'p1'], [/really say it/, 'yes']]);
+    await play(g, 'p0', 'royal-parrot');
+    assert.strictEqual(g.gold('p1'), 500, 'pays 100, the King accepts the line');
+    g = setup();
+    script = pickBy([[/who is your parrot/, 'p1'], [/really say it/, 'no']]);
+    await play(g, 'p0', 'royal-parrot');
+    assert.strictEqual(g.gold('p1'), 200, 'the King did not hear it: counts as refusing (100 + 300)');
+  },
+  async 'Bend the Knee: a player who cannot afford to refuse must say it again'() {
+    const g = setup();
+    g.players.p1.gold = 200;
+    let asked = 0;
+    script = pickBy([[/who must thank you/, 'p1'], [/really say it/, () => (++asked === 1 ? 'no' : 'yes')]]);
+    await play(g, 'p0', 'bend-the-knee');
+    assert.strictEqual(asked, 2, 'asked to say it twice');
+    assert.strictEqual(g.gold('p1'), 200, 'no gold lost');
+  },
   async 'First-time players: round one waits for the tour, then starts'() {
     const players = ['a', 'b', 'c', 'd'].map((pid, i) => ({ pid, name: pid.toUpperCase(), learning: i < 2, isBot: i === 3 }));
     const g = new Game({ players, settings: { botDelayMs: 0, negotiationSeconds: 0, introSeconds: 60 }, onError: (e) => { throw e; } });

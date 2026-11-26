@@ -47,13 +47,13 @@
       if (!amKing && k) list.push({ target: () => seatEl(k), title: 'This is The King', body: 'The black plate with the crown. <b>The moment you have more gold than the King, you become King</b>: you swap seats, cards and roles. That is the whole game.' });
       list.push(
         { target: () => $('#hand'), title: 'Your hand', body: `You always hold 8 cards. On your turn, <b>click a card</b> to read it and play it. ${amKing ? 'The King plays 3 cards a turn.' : 'Nobles play 2 cards a turn, the King plays 3.'} Greyed-out cards can't be played right now.` },
-        { target: () => $('#hand'), title: 'Bluff with Knights', body: 'Instead of playing a card, you can place <b>any card face down</b> and claim it is a Knight. A real Knight blocks one Betrayal, so nobody knows whether yours is real.' },
+        { target: () => $('#hand'), title: 'Betrayal and Knights', body: 'A <b>Betrayal</b> card takes <b>all</b> of another noble’s gold, if someone supports it. A <b>Knight</b> is placed face down and blocks the next Betrayal against that player. You can also place <b>any</b> card face down and claim it’s a Knight: a bluff nobody can see through.' },
         { target: () => $('#tracker'), title: 'Four rounds', body: 'The King always goes first. Turns go <b>clockwise</b> in rounds one and three, <b>counter-clockwise</b> in rounds two and four.' },
         { target: () => $('#center'), title: 'The middle of the table', body: 'Draw piles, discard piles and the die. The card being played shows up here. <b>Click any card</b> on the table to read it.' },
         { title: 'When a card needs you', body: 'A white box slides up from the bottom: pick an option, vote, roll the die or say something. <b>The red bar is your time.</b> If it runs out, a default answer is picked for you.', art: 'prompt' },
         { target: () => $('.side'), title: 'Story and scheming', body: 'The <b>log</b> tells you everything that happens: who played what and who lost gold. The <b>Chat</b> tab is for open scheming. A voice call is even better.' },
         { title: 'Negotiation', body: 'After rounds one to three, everyone gets up to 2 minutes to <b>give gold</b> (you can receive at most 400), <b>swap cards</b> and make promises. <b>Nothing is binding.</b> Lying is part of the game.', art: 'hourglass' },
-        { target: () => $('#guide-btn'), title: 'You are ready', body: 'Tips will pop up the first time things happen, and the line above your hand always says what to do next. Open <b>Guide</b> any time to replay this tour or turn the tips off.', last: true },
+        { target: () => $('#guide-btn'), title: 'You are ready', body: 'Tips will pop up the first time things happen, and the line above your hand tells you when it’s your move. Open <b>Guide</b> any time to replay this tour or turn the tips off.', last: true },
       );
       return list;
     }
@@ -221,7 +221,7 @@
         const anchor = () => $('#prompt');
         if (/support/i.test(p.title)) tip('prompt-support', anchor, 'Betrayal needs support', 'A Betrayal only works if <b>another player speaks up for it</b>. Support it if you want it to succeed; stay silent to let it fail. Say it on your call too!');
         else if (p.kind === 'roll') tip('prompt-roll', anchor, 'Roll the die', 'Click the button to roll. Everyone sees the result on the die in the middle of the table.');
-        else if (p.kind === 'say') tip('prompt-say', anchor, 'Say it out loud', 'Some cards make players speak. Keep or type the line and press <b>Say it</b>, and say it out loud on your call for the full effect.');
+        else if (p.kind === 'say') tip('prompt-say', anchor, 'Say it out loud', 'Say the line out loud on your call, then press <b>I said it</b>. When refusing costs gold, the player of the card confirms they heard you; if not, it counts as refusing.');
         else if (p.kind === 'cards') tip('prompt-cards', anchor, 'Pick a card', 'Click one of the cards shown in the box.');
         else if (/vote/i.test(p.title) || (p.options || []).some((o) => /^(yes|no)$/i.test(String(o.label)))) tip('prompt-vote', anchor, 'Time to vote', 'Votes stay secret until everyone has answered, then they are shown together.');
         else if (p.cancelable) tip('prompt-own', anchor, 'Finish your card', 'Your card asks you to choose. Changed your mind? <b>Take the card back</b> works until something actually happens.');
@@ -249,6 +249,14 @@
       if (!tipNow && m && prev && prev.gold !== undefined && m.gold < prev.gold) {
         tip('gold-lost', () => seatEl(m.pid), 'You lost gold', `You went from ${prev.gold} to ${m.gold}. The log on the right says why.`);
       }
+      if (!tipNow && g.phase === 'play') {
+        const has = (id) => g.hand.find((c) => c.id === id);
+        const cardEl = (c) => () => document.querySelector(`#hand .slot[data-card="${c.uid}"]`);
+        const kn = has('knight') || has('king-knight');
+        const bt = has('betrayal');
+        if (kn) tip('have-knight', cardEl(kn), 'You have a Knight', m && m.isKing ? 'Place it face down in front of a noble to protect them from the next Betrayal. Click it to choose who.' : 'Place it face down in front of you on your turn. It blocks the next Betrayal against you, and nobody can tell it from a bluff.');
+        else if (bt) tip('have-betrayal', cardEl(bt), 'You have a Betrayal', 'From round two, it takes all of another noble’s gold, but only if someone supports you right after you play it. Make friends first (negotiation is a good time).');
+      }
       if (!tipNow && $('#me-info [data-bb]')) {
         tip('bad-blood', () => $('#me-info [data-bb]'), 'Bad Blood', 'Someone profits every round until you or the other named noble pays the other 200. Press this button to pay and end it.');
       }
@@ -274,16 +282,9 @@
       const m = me();
       if (g.phase === 'intro') return g.intro && g.intro.pending.includes(you) ? 'Take the quick tour. The game starts when you are done.' : 'Waiting for new players to finish the tour.';
       if (g.phase === 'over') return '';
-      if (g.prompts.length) return 'A card needs your answer: use the white box at the bottom.';
-      if (g.phase === 'negotiation') return 'Negotiation: make deals, give gold, or click a card to offer a swap. Press “I’m done” when finished.';
-      if (g.turn && g.turn.pid === you) {
-        if (!g.turn.canPlay) return 'Your card is being resolved…';
-        return `Your turn: click a card and play it (${g.turn.playsLeft} left).`;
-      }
-      if (g.turn) {
-        const goal = m && !m.isKing ? ` Goal: get more gold than ${pname(kingPid())} (${(g.players.find((p) => p.isKing) || {}).gold}).` : ' Goal: keep more gold than every noble.';
-        return `${pname(g.turn.pid)} is taking their turn. Watch the table.${goal}`;
-      }
+      // only things you can act on; your turn has its own red badge, and someone else's
+      // turn needs no message (their seat is lifted)
+      if (g.turn && g.turn.pid === you && !g.prompts.length) return 'Click a card to read it and play it, or place it face down as a Knight.';
       return '';
     }
 

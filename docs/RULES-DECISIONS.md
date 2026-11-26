@@ -49,7 +49,7 @@ change one if your group plays it differently. The code reference is in brackets
 | King's Eye | Fines a noble who looks at the protected player's cards (Sub Rosa) or takes gold from them (to themselves), Betrayal included. |
 | Shifting Tides | The two nobles can't *take* gold for themselves from anyone except each other (Betrayals excepted). |
 | Indebted | The debt payment at the start of a round counts as the owner's card (Isolation blocks it). Anyone except the debtor and the owner can pay 200 to free them. |
-| Spoken parts (Actors, praise, pledges, Parrot) | Typed into the game and shown to the table; say them on your voice call too. |
+| Spoken parts (Actors, praise, pledges, Parrot) | Said out loud on the call and typed so the table can read it. When refusing costs gold (Bend the Knee, Royal Parrot), the player of the card confirms they heard it: if not, it counts as refusing (or, if the target can't afford to refuse, they say it again). Other spoken lines have no penalty in the rules, so they aren't checked. |
 | Timers | A player who doesn't roll within 20 s rolls automatically. Votes default to "no" after 60 s. Other answers wait 2 minutes, then take the default. The host can "Skip waiting". |
 | Disconnects | After 1 minute away, autopilot plays for you until you return. Anyone can turn on autopilot, and the host can turn it on for others. |
 | First-time guide | Each player chooses it for themselves in the lobby. Before round one the game waits until everyone who chose it has finished the tour (at most 4 minutes; the host can skip). A refresh doesn't end the wait; a player away for a minute goes on autopilot, which does. |

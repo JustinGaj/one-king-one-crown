@@ -462,7 +462,7 @@ const KING = [
       const t = await g.pickPlayer(ctx.pid, 'Bend the Knee — who must thank you?', g.nobles());
       const s = await say(g, t, 'Bend the Knee: thank the King for everything they’ve done for you', {
         prefill: 'Thank you, my King, for everything you have done for me.', allowRefuse: true,
-        refuseLabel: 'Refuse (pay 300 to the bank)', refuseDisabled: g.gold(t) < 300,
+        refuseLabel: 'Refuse (pay 300 to the bank)', refuseDisabled: g.gold(t) < 300, judge: ctx.pid,
       });
       if (s === null) g.lose(t, 300, { by: ctx.pid, card: 'bend-the-knee' });
     },
@@ -558,7 +558,7 @@ const KING = [
       const sentence = await g.ask(ctx.pid, { kind: 'say', title: `What must ${g.name(t)} repeat in a high-pitched voice?`, prefill: 'I am the King’s pretty little parrot!' });
       g.lose(t, 100, { by: ctx.pid, card: 'royal-parrot' });
       g.log(`🦜 ${g.name(t)} must repeat in a high-pitched voice: “${sentence}”`);
-      const s = await say(g, t, 'Royal Parrot: repeat it in a high-pitched voice!', { exact: sentence, allowRefuse: true, refuseLabel: 'Refuse (pay 300 to the bank)' });
+      const s = await say(g, t, 'Royal Parrot: repeat it in a high-pitched voice!', { exact: sentence, allowRefuse: true, refuseLabel: 'Refuse (pay 300 to the bank)', judge: ctx.pid });
       if (s === null) g.lose(t, 300, { by: ctx.pid, card: 'royal-parrot' });
     },
   },

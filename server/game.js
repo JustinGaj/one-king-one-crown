@@ -334,11 +334,30 @@ class Game {
     return value;
   }
 
-  // Spoken parts of cards are typed and shown to the table (say it out loud on your call too!)
-  async say(pid, title, { prefill = '', exact = null, allowRefuse = false, refuseLabel, refuseDisabled = false, text } = {}) {
-    const v = await this.ask(pid, { kind: 'say', title, text, prefill: exact || prefill, exact, allowRefuse, refuseLabel, refuseDisabled, timeoutSec: this.settings.sayingSeconds, default: exact || prefill || '...' });
+  // Spoken parts of cards are said out loud on the call and typed so the table can read them.
+  // When refusing costs gold (Bend the Knee, Royal Parrot), the player of the card is the judge,
+  // like at a real table: they confirm they actually heard it, or it counts as refusing.
+  async say(pid, title, { prefill = '', exact = null, allowRefuse = false, refuseLabel, refuseDisabled = false, text, judge = null } = {}) {
+    const judged = judge && judge !== pid && !this.isAuto(judge) && this.players[judge].connected;
+    const note = judged ? `Say it out loud on the call, then press “I said it”. ${this.name(judge)} confirms whether it counts.` : 'Say it out loud on the call, then press “I said it”.';
+    const v = await this.ask(pid, { kind: 'say', spoken: true, title, text: text ? `${text} ${note}` : note, prefill: exact || prefill, exact, allowRefuse, refuseLabel, refuseDisabled, timeoutSec: this.settings.sayingSeconds, default: exact || prefill || '...' });
     if (v === 'refuse') { this.log(`${this.name(pid)} refuses!`, { kind: 'say' }); return null; }
     this.log(`🗣 ${this.name(pid)}: “${v}”`, { kind: 'say' });
+    if (judged) {
+      const ok = await this.choose(judge, `Did ${this.name(pid)} really say it out loud?`, [
+        { value: 'yes', label: 'Yes, it counts' },
+        { value: 'no', label: refuseDisabled ? 'No, make them say it again' : 'No, that counts as refusing' },
+      ], { text: `They were to say: “${v}”. Judge by what you heard on the call.`, timeoutSec: 25, default: 'yes' });
+      if (ok === 'no') {
+        if (refuseDisabled) {
+          this.log(`${this.name(judge)} didn't hear it. ${this.name(pid)} has to say it again.`, { kind: 'say' });
+          return this.say(pid, title, { prefill, exact, text, allowRefuse, refuseLabel, refuseDisabled: this.gold(pid) < 300, judge });
+        }
+        this.log(`${this.name(judge)} didn't hear it, so it counts as refusing.`, { kind: 'say' });
+        return null;
+      }
+      this.log(`${this.name(judge)} accepts it.`, { kind: 'say' });
+    }
     return v;
   }
 
