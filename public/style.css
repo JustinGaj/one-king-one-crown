@@ -302,15 +302,19 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--red); outli
   border: 2.5px solid var(--ink); box-shadow: 0 0 0 1.5px var(--paper); cursor: pointer; position: relative;
   transition: transform .22s var(--ease), filter .2s, box-shadow .22s;
 }
-.hand .card { margin: 0 var(--m, -7px); transform-origin: 50% 120%; transform: translateY(var(--y, 0)) rotate(var(--r, 0deg)); }
-.hand .card.enter { animation: deal .55s var(--ease) both; animation-delay: var(--d, 0s); }
+.hand .slot { position: relative; flex: none; margin: 0 var(--m, -7px); transform-origin: 50% 120%; transform: translateY(var(--y, 0)) rotate(var(--r, 0deg)); }
+.hand .slot.enter { animation: deal .55s var(--ease) both; animation-delay: var(--d, 0s); }
 @keyframes deal { from { opacity: 0; transform: translateY(120px) rotate(calc(var(--r, 0deg) * 3)); } }
-.hand .card:hover, .hand .card:focus-visible { transform: translateY(-30px) rotate(0deg) scale(1.13); z-index: 5; outline: none;
+.hand .slot:hover, .hand .slot:focus-within { z-index: 5; }
+/* while hovered, the slot also covers the space the raised card moved into */
+.hand .slot:hover::after { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 44px; }
+.hand .slot .card { transform-origin: 50% 100%; }
+.hand .slot:hover .card, .hand .card:focus-visible { transform: translateY(-30px) rotate(calc(var(--r, 0deg) * -1)) scale(1.13); outline: none;
   box-shadow: 0 0 0 1.5px var(--paper), 0 14px 26px rgba(0, 0, 0, .55); }
 .hand .card.playable::before { content: ""; position: absolute; inset: -6px; border-radius: 13px; border: 2px solid var(--red); opacity: 0; transition: opacity .2s; }
-.hand .card.playable:hover::before { opacity: 1; }
+.hand .slot:hover .card.playable::before { opacity: 1; }
 .card.dim { filter: grayscale(1) brightness(.5); }
-.hand .card.dim:hover { filter: grayscale(1) brightness(.8); }
+.hand .slot:hover .card.dim { filter: grayscale(1) brightness(.8); }
 .card .tagline { position: absolute; left: 6px; right: 6px; bottom: 6px; font-size: 8.5px; font-weight: 900; text-align: center; background: var(--ink); color: var(--paper);
   padding: 2px; border-radius: 5px; text-transform: uppercase; letter-spacing: .04em; }
 .card.sel { outline: 3px solid var(--red); outline-offset: 2px; }
@@ -440,8 +444,9 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--red); outli
   .hand { justify-content: flex-start; padding: 16px 10px 8px; overflow-x: auto; overflow-y: hidden; height: calc(var(--card-w) * 1.414 + 30px); }
   .me-bar { padding-top: 4px; }
   .waiting { display: none; }
-  .hand .card { margin: 0 3px; --r: 0deg !important; --y: 0px !important; }
-  .hand .card:hover { transform: translateY(-14px); }
+  .hand .slot { margin: 0 3px; --r: 0deg !important; --y: 0px !important; }
+  .hand .slot:hover .card { transform: translateY(-14px); }
+  .hand .slot:hover::after { height: 16px; }
   .me-info .hint { display: none; }
   .brand { display: none; }
   :root { --card-w: 68px; }

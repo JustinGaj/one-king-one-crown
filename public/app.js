@@ -443,17 +443,20 @@
       const off = i - mid;
       const isNew = !dealt.has(c.uid);
       const delay = isNew ? (firstDeal ? i * 0.06 : fresh++ * 0.12) : 0;
-      return `<div class="card ${dim ? 'dim' : ''} ${playable ? 'playable' : ''} ${isNew && !reduceMotion ? 'enter' : ''}" style="background-image:url(${art(c.id)});--r:${(off * spread).toFixed(2)}deg;--y:${(off * off * 1.1).toFixed(1)}px;--d:${delay}s" data-card="${c.uid}" title="${esc(cname(c.id))}" role="button" tabindex="0" aria-label="${esc(cname(c.id))}">${note ? `<span class="tagline">${note}</span>` : ''}</div>`;
+      // the slot holds the card's place in the fan and never moves, so the hover area stays put
+      // while the card inside rises (otherwise the card slides out from under the cursor and flickers)
+      return `<div class="slot ${isNew && !reduceMotion ? 'enter' : ''}" style="--r:${(off * spread).toFixed(2)}deg;--y:${(off * off * 1.1).toFixed(1)}px;--d:${delay}s" data-card="${c.uid}">`
+        + `<div class="card ${dim ? 'dim' : ''} ${playable ? 'playable' : ''}" style="background-image:url(${art(c.id)})" data-card="${c.uid}" title="${esc(cname(c.id))}" role="button" tabindex="0" aria-label="${esc(cname(c.id))}">${note ? `<span class="tagline">${note}</span>` : ''}</div></div>`;
     }).join('') || '<span class="empty-hand">No cards.</span>';
     fitHand();
     dealt.clear();
     for (const { c } of items) dealt.add(c.uid);
-    for (const el of $$('#hand .card.enter')) el.addEventListener('animationend', () => el.classList.remove('enter'), { once: true });
+    for (const el of $$('#hand .slot.enter')) el.addEventListener('animationend', () => el.classList.remove('enter'), { once: true });
   }
   // overlap the cards more when a big hand would not fit the bar
   function fitHand() {
     const hand = $('#hand');
-    const cards = hand.querySelectorAll('.card');
+    const cards = hand.querySelectorAll('.slot');
     if (!cards.length || window.innerWidth <= 820) { hand.style.removeProperty('--m'); return; }
     const cw = cards[0].offsetWidth;
     const avail = hand.clientWidth - 60;
