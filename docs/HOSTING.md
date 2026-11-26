@@ -16,8 +16,9 @@ on a name of your own, kept awake around the clock.
 1. Sign in at [render.com](https://render.com) with your GitHub account. No card is asked for.
 2. **New + → Blueprint**, give Render access to the `one-king-one-crown` repository, and pick it.
    Render reads `render.yaml` and creates a free web service called `one-king-one-crown`.
-3. Wait for the first deploy to finish (a few minutes). The game is then live at
-   `https://one-king-one-crown.onrender.com` (Render shows the exact address).
+3. Wait for the first deploy to finish (a few minutes). Render shows the address at the top of
+   the service page. This game's is **https://one-king-one-crown-byfj.onrender.com** (the plain
+   `one-king-one-crown.onrender.com` belongs to someone else's project, so Render added `-byfj`).
 
 Every push to `main` redeploys automatically. A deploy restarts the server, which ends games in
 progress; players see a notice. Push between games.
@@ -28,7 +29,8 @@ A free Render service goes to sleep after 15 minutes without traffic and takes a
 wake up. A free uptime monitor visiting it every 5 minutes keeps it awake.
 
 1. Make a free account at [uptimerobot.com](https://uptimerobot.com).
-2. **Add New Monitor**: type **HTTP(s)**, URL `https://<your address>/healthz`, interval **5 minutes**.
+2. **Add New Monitor**: type **HTTP(s)**, URL `https://one-king-one-crown-byfj.onrender.com/healthz`,
+   interval **5 minutes**.
 
 Render gives each account 750 free hours a month, which covers one service running all month
 (at most 744 hours). Don't run a second free service on the same account, or both can be paused
@@ -47,7 +49,7 @@ through a pull request on GitHub.
    ```json
    {
      "owner": { "username": "JustinGaj" },
-     "records": { "CNAME": "one-king-one-crown.onrender.com" }
+     "records": { "CNAME": "one-king-one-crown-byfj.onrender.com" }
    }
    ```
 3. Open the pull request and describe the project ("free fan-made online version of a card game").
