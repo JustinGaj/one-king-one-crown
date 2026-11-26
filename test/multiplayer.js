@@ -46,7 +46,9 @@ async function until(fn, ms = 10000, what = 'condition') {
     assert(dup.error, 'duplicate names are rejected');
     const nonHost = await clients[1].call('host:start');
     assert(nonHost.error, 'only the host can start');
-    await host.call('host:settings', { negotiationSeconds: 3 });
+    assert((await clients[1].call('host:settings', { speed: 'fast' })).error, 'only the host sets the speed');
+    await host.call('host:settings', { negotiationSeconds: 3, speed: 'fast' });
+    await until(() => host.last && host.last.room.settings.speed === 'fast' && host.last.room.settings.pace === 'fast', 3000, 'speed setting');
     assert((await host.call('host:start')).ok, 'start');
     await until(() => clients.every((c) => c.last && c.last.game), 5000, 'everyone gets the game');
 

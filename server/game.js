@@ -24,7 +24,10 @@ const DEFAULT_SETTINGS = {
   rollSeconds: 20, // auto-roll if a player doesn't click
   responseSeconds: 120, // decisions by players who are not the active player
   sayingSeconds: 60,
-  botDelayMs: 700,
+  botDelayMs: 700, // how long a bot "thinks" before playing a card
+  botAnswerMs: null, // how long a bot takes to answer a question (defaults to botDelayMs)
+  cardHoldMs: 0, // how long a played card stays on the table after it resolves, so people can read it
+  turnGapMs: 0, // short pause between turns
 };
 
 function shuffle(arr, rng) {
@@ -547,6 +550,13 @@ class Game {
     for (const k of ['isoLook', 'isoGold']) if (this.effects[k][pid] !== undefined && this.turnsDone[pid] >= this.effects[k][pid]) delete this.effects[k][pid];
     this.turn = null;
     this.emit();
+    await this.pause(this.settings.turnGapMs);
+  }
+
+  // Pacing pauses only matter when a person is watching; all-bot games run at full speed.
+  pause(ms) {
+    if (!(ms > 0) || this.phase === 'over' || !Object.values(this.players).some((p) => !p.isBot && p.connected)) return Promise.resolve();
+    return new Promise((r) => setTimeout(r, ms));
   }
 
   // ───────────────────────── playing cards ─────────────────────────
@@ -590,6 +600,8 @@ class Game {
       this.log(target === pid
         ? `${this.name(pid)} places a card face down — they claim it is a Knight.`
         : `👑 The King places a card face down in front of ${this.name(target)} — a Knight to protect them?`, { kind: 'play' });
+      this.emit();
+      await this.pause(this.settings.cardHoldMs / 2);
       return;
     }
     const ctx = { pid, card, committed: false, keep: false, extraPlays: 0 };
@@ -611,6 +623,7 @@ class Game {
       }
     } finally {
       this.ctx = null;
+      if (ctx.committed) { this.emit(); await this.pause(this.settings.cardHoldMs); } // let everyone read it
       this.resolving = null;
       this.emit();
     }
@@ -864,7 +877,10 @@ class Game {
   // ───────────────────────── bots / autopilot ─────────────────────────
   scheduleBot(pid) {
     if (!this.isAuto(pid)) return;
-    const delay = this.players[pid].isBot ? this.settings.botDelayMs : Math.min(400, this.settings.botDelayMs);
+    // answering a question is quicker than choosing a card; a little randomness feels less robotic
+    const answering = [...this.prompts.values()].some((p) => p.pid === pid);
+    const base = answering ? (this.settings.botAnswerMs != null ? this.settings.botAnswerMs : this.settings.botDelayMs) : this.settings.botDelayMs;
+    const delay = base > 0 ? Math.round(base * (0.8 + Math.random() * 0.4)) : 0;
     const run = () => {
       try {
         if (!this.isAuto(pid)) return;

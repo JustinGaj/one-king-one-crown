@@ -152,6 +152,8 @@
   $('#add-bot').onclick = () => send('host:addBot');
   $('#start').onclick = () => send('host:start');
   $('#neg-seconds').onchange = (e) => send('host:settings', { negotiationSeconds: Number(e.target.value) });
+  $('#speed').onchange = (e) => send('host:settings', { speed: e.target.value });
+  $('#speed-game').onchange = (e) => send('host:settings', { speed: e.target.value });
   $('#leave').onclick = async () => { const r = await send('leave'); if (!r.error) { save(null); S = { room: null, game: null }; history.replaceState(null, '', '/'); show('home'); } };
   document.addEventListener('submit', (e) => {
     if (!e.target.matches('[data-chat]')) return;
@@ -192,6 +194,7 @@
     }
     $('#host-controls').classList.toggle('hidden', !isHost());
     $('#neg-seconds').value = String(r.settings.negotiationSeconds);
+    $('#speed').value = r.settings.speed || 'auto';
     const n = r.members.length;
     $('#start').disabled = n < MIN_PLAYERS;
     $('#add-bot').disabled = n >= MAX_PLAYERS;
@@ -250,6 +253,11 @@
     $('#phase').innerHTML = txt;
     $('#skip').classList.toggle('hidden', !isHost() || (!g.waiting.length && g.phase !== 'intro') || g.phase === 'over');
     $('#guide-btn').classList.toggle('on', guide.isOn());
+    const sp = $('#speed-game');
+    sp.classList.toggle('hidden', !isHost() || g.phase === 'over');
+    if (document.activeElement !== sp) sp.value = S.room.settings.speed || 'auto';
+    const pace = S.room.settings.pace;
+    sp.title = `Game speed (host). Playing ${pace}: bots think longer and each card stays on the table for a moment when slower.`;
     const me = meP();
     $('#auto-me').classList.toggle('on', !!(me && me.auto));
     $('#auto-me').textContent = me && me.auto ? 'Autopilot on' : 'Autopilot';

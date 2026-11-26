@@ -557,3 +557,8 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--red); outli
   .table.tiny .seat .fd .k { width: 13px; height: 18px; }
   .table.tiny .center { transform: translate(-50%, -50%) scale(.5); }
 }
+
+/* host's in-game speed switch */
+.speed-sel { background: var(--ink); color: var(--paper); border: 2px solid var(--paper); border-radius: 8px; padding: 4px 8px; font-size: 11px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .03em; cursor: pointer; }
+.speed-sel:focus { outline: 2px solid var(--red); }

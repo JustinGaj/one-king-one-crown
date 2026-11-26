@@ -80,6 +80,14 @@
             <option value="0">Skip negotiation</option>
           </select>
         </label>
+        <label class="inline">Speed
+          <select id="speed">
+            <option value="auto">Auto (slower while anyone uses the guide)</option>
+            <option value="relaxed">Relaxed</option>
+            <option value="normal">Normal</option>
+            <option value="fast">Fast</option>
+          </select>
+        </label>
         <button id="start" class="btn primary">Start game</button>
       </div>
       <p id="lobby-error" class="error" role="alert"></p>
@@ -98,6 +106,12 @@
       <div id="tracker" class="tracker"></div>
       <div id="phase" class="phase"></div>
       <div class="top-actions">
+        <select id="speed-game" class="speed-sel hidden" title="Game speed (host)" aria-label="Game speed">
+          <option value="auto">Speed: auto</option>
+          <option value="relaxed">Speed: relaxed</option>
+          <option value="normal">Speed: normal</option>
+          <option value="fast">Speed: fast</option>
+        </select>
         <button id="skip" class="btn small hidden" title="Answer every open question with its default">Skip waiting</button>
         <button id="auto-me" class="btn small" title="Let the computer play for you">Autopilot</button>
         <button id="guide-btn" class="btn small" title="Tour, tips and rules">Guide</button>
