@@ -7,11 +7,21 @@ const { Server } = require('socket.io');
 const { Room } = require('./room');
 const { GameError } = require('./game');
 const { CATALOG } = require('./cards');
+const sec = require('./security');
 
 const PORT = Number(process.env.PORT) || 3000;
 const app = express();
+app.disable('x-powered-by');
+if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1); // so req.secure works behind the host's proxy
+app.use(sec.securityHeaders);
 const server = http.createServer(app);
-const io = new Server(server, { pingInterval: 10000, pingTimeout: 20000 });
+const io = new Server(server, {
+  pingInterval: 10000,
+  pingTimeout: 20000,
+  maxHttpBufferSize: 16 * 1024, // game messages are tiny; refuse anything big
+  perMessageDeflate: { threshold: 1024 }, // compress game state: much less bandwidth
+  allowRequest: (req, cb) => cb(null, sec.originAllowed(req)), // only this site may connect
+});
 
 const PUBLIC = path.join(__dirname, '..', 'public');
 // Serve index.html with versioned asset URLs so browsers always load the current client
@@ -47,9 +57,21 @@ function onEmpty(room) {
   }, ROOM_EMPTY_MS);
 }
 
+// Limit open connections per network address
+io.use((socket, next) => {
+  const ip = sec.clientIp(socket.request);
+  if (!sec.admitSocket(ip)) return next(new Error('Too many connections from your network. Close some tabs and try again.'));
+  socket.data.ip = ip;
+  socket.on('disconnect', () => sec.releaseSocket(ip));
+  next();
+});
+
 io.on('connection', (socket) => {
   let room = null;
   let pid = null;
+  const ip = socket.data.ip;
+  const events = new sec.Bucket(sec.LIMITS.eventsPerSec, sec.LIMITS.eventsPerSec * 3);
+  const chats = new sec.Bucket(sec.LIMITS.chatPerSec, 6);
 
   const enter = (r, member) => {
     if (room && pid) room.detach(pid, socket);
@@ -62,6 +84,8 @@ io.on('connection', (socket) => {
   // Wrap a handler so it always acks { ok } or { error }
   const on = (event, fn) => socket.on(event, (data, ack) => {
     if (typeof ack !== 'function') ack = () => {};
+    if (!events.take() || (event === 'chat' && !chats.take())) { ack({ error: 'Slow down a little.' }); return; }
+    if (data !== undefined && (data === null || typeof data !== 'object' || Array.isArray(data))) { ack({ error: 'Bad request.' }); return; }
     try {
       const res = fn(data || {});
       ack({ ok: true, ...(res || {}) });
@@ -74,16 +98,20 @@ io.on('connection', (socket) => {
   const game = () => { const r = need(); if (!r.game || r.game.phase === 'over') throw new GameError('No game is running.'); return r.game; };
 
   on('create', ({ name }) => {
+    if (rooms.size >= sec.LIMITS.rooms) throw new GameError('The server is full right now. Try again in a few minutes.');
+    if (!sec.canCreateRoom(ip)) throw new GameError('You have created a lot of rooms. Wait a few minutes.');
     const r = new Room(newCode(), onEmpty);
     rooms.set(r.code, r);
     return enter(r, r.addMember(name));
   });
   on('join', ({ code, name }) => {
+    if (!sec.canJoin(ip)) throw new GameError('Too many attempts. Wait a minute and try again.');
     const r = rooms.get(String(code || '').toUpperCase().trim());
     if (!r) throw new GameError('No room with that code.');
     return enter(r, r.running() ? r.reclaim(name) : r.addMember(name));
   });
   on('resume', ({ code, pid: p, token }) => {
+    if (!sec.canJoin(ip)) throw new GameError('Too many attempts. Wait a minute and try again.');
     const r = rooms.get(String(code || '').toUpperCase());
     if (!r || !r.members.has(p)) throw new GameError('That game no longer exists.');
     return enter(r, { pid: p, token });
@@ -124,3 +152,17 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => console.log(`One King One Crown is running on http://localhost:${PORT}`));
+
+// When the host restarts the server (for example on a new deploy), tell everyone first.
+let closing = false;
+function shutdown(sig) {
+  if (closing) return;
+  closing = true;
+  console.log(`${sig} received, shutting down`);
+  io.emit('notice', 'The server is restarting. Games in progress have ended; create a new game in a moment.');
+  setTimeout(() => { io.close(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 2000).unref(); }, 800);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+// One bad message must never take the whole server (and everyone's games) down.
+process.on('unhandledRejection', (e) => console.error('Unhandled rejection:', e));

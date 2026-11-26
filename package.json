@@ -6,10 +6,10 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node test/rules.js && node test/sim.js 300 && node test/multiplayer.js"
+    "test": "node test/rules.js && node test/sim.js 300 && node test/multiplayer.js && node test/security.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "license": "CC-BY-NC-SA-4.0",
   "dependencies": {

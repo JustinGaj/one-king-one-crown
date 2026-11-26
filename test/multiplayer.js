@@ -25,7 +25,7 @@ async function until(fn, ms = 10000, what = 'condition') {
 }
 
 (async () => {
-  const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], { env: { ...process.env, PORT, OKOC_TEST_AUTOPILOT: '1', OKOC_ABSENT_GRACE_MS: '400', OKOC_ABSENT_VOTE_MS: '6000', OKOC_ROOM_EMPTY_MS: '1000' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], { env: { ...process.env, PORT, OKOC_TEST_AUTOPILOT: '1', OKOC_ABSENT_GRACE_MS: '400', OKOC_ABSENT_VOTE_MS: '6000', OKOC_ROOM_EMPTY_MS: '1000', OKOC_MAX_SOCKETS_PER_IP: '100' }, stdio: ['ignore', 'pipe', 'pipe'] });
   let errs = '';
   srv.stderr.on('data', (d) => { errs += d; });
   await new Promise((res) => srv.stdout.on('data', (d) => { if (String(d).includes('running')) res(); }));

@@ -38,15 +38,10 @@ The host can add bots and starts the game once there are 4–8 players.
 
 ## Play with friends far away
 
-Friends need to reach your server over the internet. Pick one option:
-
-1. **Host it (recommended).** Deploy this repo to any Node host that supports WebSockets, such
-   as Render, Railway or Fly.io. Build: `npm install`. Start: `npm start`. The server reads `PORT`
-   from the environment. Run a single instance: games live in memory, so a restart ends the
-   games in progress.
-2. **Tunnel from your computer.** Run `npm start`, then expose it, for example with
-   `cloudflared tunnel --url http://localhost:3000`, and send friends the URL it prints. Keep
-   your computer awake while you play.
+Host it for free, with your own name and kept awake 24/7: follow
+[docs/HOSTING.md](docs/HOSTING.md) (Render free plan, an is-a.dev name and a free uptime
+monitor; no credit card). For a quick one-off session you can also run `npm start` and expose it
+with `cloudflared tunnel --url http://localhost:3000`.
 
 Use a voice call too: many cards ask you to say things out loud.
 

@@ -43,6 +43,8 @@
     }
   });
   socket.on('disconnect', () => toast('Connection lost. Reconnecting…', 4000));
+  socket.on('notice', (msg) => toast(String(msg), 9000));
+  socket.on('connect_error', (e) => { if (e && e.message && !/xhr|websocket|timeout/i.test(e.message)) toast(e.message, 6000); });
   socket.on('kicked', () => { save(null); S = { room: null, game: null }; show('home'); toast('You were removed from the room.'); });
   socket.on('state', (st) => {
     clockSkew = Date.now() - st.now;
