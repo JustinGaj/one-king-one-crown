@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node test/rules.js && node test/sim.js 300"
+    "test": "node test/rules.js && node test/sim.js 300 && node test/multiplayer.js"
   },
   "engines": {
     "node": ">=18"
@@ -15,5 +15,8 @@
   "dependencies": {
     "express": "^4.21.2",
     "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.4"
   }
 }

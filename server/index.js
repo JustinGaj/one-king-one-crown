@@ -1,4 +1,5 @@
 'use strict';
+const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const express = require('express');
@@ -12,7 +13,14 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { pingInterval: 10000, pingTimeout: 20000 });
 
-app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: '1h' }));
+const PUBLIC = path.join(__dirname, '..', 'public');
+// Serve index.html with versioned asset URLs so browsers always load the current client
+const BUILD = Date.now().toString(36);
+const INDEX = fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8')
+  .replace('/app.js"', `/app.js?v=${BUILD}"`).replace('/style.css"', `/style.css?v=${BUILD}"`);
+app.get(['/', '/index.html'], (req, res) => { res.set('Cache-Control', 'no-cache'); res.type('html').send(INDEX); });
+app.use('/art', express.static(path.join(PUBLIC, 'art'), { maxAge: '7d' }));
+app.use(express.static(PUBLIC, { maxAge: 0, etag: true })); // always revalidate code so updates show up
 app.get('/api/cards', (req, res) => res.json(CATALOG));
 app.get('/healthz', (req, res) => res.send('ok'));
 

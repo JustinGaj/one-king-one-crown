@@ -131,8 +131,12 @@ class Room {
     this.requireHost(pid);
     if (!this.game) return;
     for (const p of [...this.game.prompts.values()]) {
-      if (p.kind === 'roll' || p.kind === 'info') p.resolve(true);
-      else if (p.default !== undefined) p.resolve(p.default);
+      if (p.kind === 'roll' || p.kind === 'info') { p.resolve(true); continue; }
+      let v = p.default;
+      if (v === undefined && p.kind === 'cards' && p.cards && p.cards.length) v = p.cards[0].uid;
+      if (v === undefined && p.options) { const o = p.options.find((x) => !x.disabled); if (o) v = o.value; }
+      if (v === undefined && p.kind === 'say') v = p.exact || p.prefill || '…';
+      if (v !== undefined) p.resolve(v);
     }
     this.game.log('The host skipped the waiting.');
   }

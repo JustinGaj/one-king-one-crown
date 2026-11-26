@@ -96,6 +96,7 @@ class Game {
   def(card) { return DEFS[card.id]; }
 
   log(text, opts = {}) {
+    if (this.ctx && !this.ctx.committed) this.commit(); // announce the card before its effects
     this.logEntries.push({ i: this.logEntries.length, t: Date.now(), text, to: opts.to || null, kind: opts.kind || 'info' });
     if (this.logEntries.length > 600) this.logEntries.splice(0, 100);
     this.emit();
